@@ -1,0 +1,52 @@
+services:
+  # MongoDB Database Service
+  mongo:
+    image: mongo:7
+    container_name: smartbuy-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
+
+  # Express AI Recommendation Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: smartbuy-backend
+    restart: unless-stopped
+    ports:
+      - "5050:5050"
+    environment:
+      PORT: 5050
+      NODE_ENV: production
+      CLIENT_URL: "http://localhost:5173"
+      MONGO_URI: "mongodb://mongo:27017/techbuddy"
+    env_file:
+      - ./backend/.env
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  # Vite React Frontend SPA (Served via Nginx with API proxy)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: smartbuy-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  mongo_data:

@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: smartbuy-ai
+    runtime: node
+    plan: free
+    buildCommand: npm run build:render
+    startCommand: npm run start:production
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: USE_MOCK_DATA
+        value: "false"
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true

@@ -1,0 +1,25 @@
+{
+  "name": "smartbuy-ai",
+  "version": "1.0.0",
+  "description": "SmartBuy AI — Intent-aware AI-powered technology shopping assistant",
+  "type": "module",
+  "scripts": {
+    "start": "node start.js",
+    "dev": "node start.js",
+    "build:render": "npm ci --prefix backend --omit=dev && npm ci --prefix frontend --include=dev && VITE_API_URL=/api npm --prefix frontend run build",
+    "start:production": "npm --prefix backend start",
+    "seed": "npm run seed --prefix backend",
+    "test": "npm test --prefix backend",
+    "docker:up": "docker compose up --build",
+    "docker:down": "docker compose down"
+  },
+  "keywords": [
+    "ai",
+    "shopping-assistant",
+    "recommendation-engine",
+    "react",
+    "express"
+  ],
+  "author": "",
+  "license": "ISC"
+}

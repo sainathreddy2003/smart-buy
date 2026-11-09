@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 540 420">
+  <defs>
+    <linearGradient id="silver" x2="1" y2="1" gradientUnits="objectBoundingBox"><stop stop-color="#ede5ff"/><stop offset=".7" stop-color="#9481c4"/><stop offset="1" stop-color="#665593"/></linearGradient>
+    <linearGradient id="screen" x2="0" y2="1" gradientUnits="objectBoundingBox"><stop stop-color="#392271"/><stop offset=".75" stop-color="#9d70f6"/><stop offset="1" stop-color="#e7cbff"/></linearGradient>
+  </defs>
+  <ellipse cx="268" cy="356" rx="190" ry="21" fill="#6143a8" opacity=".16"/>
+  <g transform="translate(298 39) rotate(13 54 113)">
+    <rect x="45" y="23" width="105" height="198" rx="18" fill="#4a387a" stroke="#bba6ee" stroke-width="4"/>
+    <rect width="110" height="207" rx="19" fill="url(#silver)" stroke="#f0e7ff" stroke-width="2"/>
+    <rect x="10" y="10" width="52" height="56" rx="13" fill="#9b88c6"/>
+    <g fill="#241d3c" stroke="#c1afe7" stroke-width="2"><circle cx="24" cy="26" r="9"/><circle cx="45" cy="39" r="9"/><circle cx="24" cy="52" r="9"/></g>
+  </g>
+  <g transform="translate(48 110) rotate(-9 150 130)">
+    <path d="M23 10h235a12 12 0 0 1 12 12v151H11V22a12 12 0 0 1 12-12Z" fill="#312448" stroke="#bcabdf" stroke-width="4"/>
+    <rect x="20" y="19" width="241" height="145" rx="5" fill="url(#screen)"/>
+    <path d="M20 144c51-57 131-66 241-47v67H20Z" fill="#c2a3ff" opacity=".6"/>
+    <path d="M11 172h260l41 46v11a6 6 0 0 1-6 6H3a6 6 0 0 1-6-6v-11Z" fill="url(#silver)" stroke="#c5b7e8" stroke-width="2"/>
+    <path d="M21 178h244l18 22H14Z" fill="#48385e"/><path d="M105 205h99l9 17H99Z" fill="#c7b6e3"/>
+  </g>
+  <g transform="translate(340 207) rotate(17 75 61)">
+    <path d="M15 85V65C15-9 133-9 133 65v20" fill="none" stroke="#463265" stroke-width="15"/>
+    <path d="M15 85V65C15-9 133-9 133 65v20" fill="none" stroke="#aa8cd7" stroke-width="8"/>
+    <rect y="67" width="43" height="65" rx="20" fill="url(#silver)" stroke="#6e568f" stroke-width="5"/>
+    <rect x="106" y="67" width="43" height="65" rx="20" fill="url(#silver)" stroke="#6e568f" stroke-width="5"/>
+  </g>
+</svg>

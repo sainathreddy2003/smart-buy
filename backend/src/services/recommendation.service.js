@@ -188,9 +188,15 @@ async function fetchCandidates(requirement, originalQuery) {
   }
 
   if (!candidates.length) {
-    if (preferredSearch.status === "rejected") throw preferredSearch.reason;
     const budgetQuery = budget?.max != null ? ` under ₹${budget.max}` : "";
-    const results = await searchProducts(keywords + budgetQuery, { category, budget, limit: 15, signal: AbortSignal.timeout(KEYWORD_SEARCH_TIMEOUT_MS) });
+    const searchOptions = { category, budget, limit: 15, signal: AbortSignal.timeout(KEYWORD_SEARCH_TIMEOUT_MS) };
+    let results = await searchProducts(keywords + budgetQuery, searchOptions);
+    if (!results.length && !searchOptions.signal.aborted) {
+      results = await searchProducts(
+        `${keywords} (site:amazon.in OR site:flipkart.com OR site:croma.com)`,
+        searchOptions,
+      );
+    }
     for (const result of results) mergeOrCreateCandidate(result, category, candidates);
   }
 
@@ -198,7 +204,7 @@ async function fetchCandidates(requirement, originalQuery) {
     const budgetMessage = budget?.max != null
       ? ` within your ₹${budget.max.toLocaleString("en-IN")} budget`
       : budget?.min ? ` at or above ₹${budget.min.toLocaleString("en-IN")}` : "";
-    throw ApiError.notFound(`No live ${category} listings from Amazon India, Flipkart, or Croma${budgetMessage}. Try refining your search.`);
+    throw ApiError.notFound(`I couldn’t verify a live ${category} offer from Amazon India, Flipkart, or Croma${budgetMessage}.`);
   }
   const preferred = preferredMinPrice == null ? [] : candidates.filter((product) => product.bestPrice >= preferredMinPrice);
   return {

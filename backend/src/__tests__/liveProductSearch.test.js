@@ -8,9 +8,26 @@ import { clear } from "../services/cache.service.js";
 import { env } from "../config/env.js";
 import { searchProducts } from "../services/productSearch.service.js";
 import { generateRecommendation } from "../services/recommendation.service.js";
+import { parseRequirementDeterministically } from "../utils/deterministicParser.js";
 
 const megaHost = "google-search-master-mega.p.rapidapi.com";
 const amazonIndia = "https://www.amazon.in/dp/B000000001";
+
+function mockRecommendationPersistence(t) {
+  const savedProducts = new Map();
+  t.mock.method(Product, "findOneAndUpdate", async (_, { $set }) => {
+    const saved = { _id: $set.name, ...$set };
+    savedProducts.set(saved._id, saved);
+    return saved;
+  });
+  t.mock.method(PriceHistory, "create", async () => {});
+  t.mock.method(Recommendation, "create", async (data) => ({
+    populate: async () => {},
+    toObject: () => ({ ...data, picks: data.picks.map((pick) => ({
+      ...pick, product: { ...savedProducts.get(pick.product) },
+    })) }),
+  }));
+}
 
 test("saved product and recommendation prices exclude unapproved sellers", () => {
   const sellers = [
@@ -70,7 +87,7 @@ test("search skips over-budget and misleading listings and tries SerpApi next", 
     assert.equal(url.hostname, "serpapi.com");
     assert.equal(url.searchParams.get("gl"), "in");
     return Response.json({ shopping_results: [
-      { title: "Example Phone 13", price: "₹60,000", link },
+      { title: "Example Phone 13", price: "₹60,000", link: "https://www.google.com/search?q=phone", direct_link: link },
       { title: "Example Phone 13", price: "₹29,999", link },
     ] });
   });
@@ -117,6 +134,36 @@ test("a slow primary provider is aborted and an eligible fallback can still win"
   }
 });
 
+test("camera-phone searches retry approved retailers and keep the ₹1.50 lakh ceiling", async (t) => {
+  env.useMockData = false;
+  env.serpApi.key = null;
+  env.rapidApi.key = "test";
+  t.mock.method(Groq.Chat.Completions.prototype, "create", async () => ({
+    choices: [{ message: { content: '{"products":[]}' } }],
+  }));
+  mockRecommendationPersistence(t);
+  const fetch = t.mock.method(globalThis, "fetch", async (url) => {
+    if (url.hostname !== megaHost) return Response.json({ data: { products: [] } });
+    if (!url.searchParams.get("q").includes("site:amazon.in")) return Response.json({ shopping: [] });
+    assert.equal(url.searchParams.get("gl"), "in");
+    return Response.json({ shopping: [
+      { title: "Example Camera Phone", price: "₹1,19,999", source: "Amazon", link: "https://www.google.com/search?ibp=oshop&prds=catalogid:42&gl=in" },
+      { title: "Example Camera Phone Plus", price: "₹1,25,000", link: `https://www.google.com/url?q=${encodeURIComponent("https://www.flipkart.com/item/p/123")}` },
+      { title: "Example Camera Phone Ultra", price: "₹1,50,001", link: amazonIndia },
+      { title: "Example Camera Phone US", price: "₹1,00,000", source: "Amazon", link: "https://www.google.com/search?ibp=oshop&prds=catalogid:43&gl=us" },
+      { title: "Example Camera Phone Used", price: "₹70,000", source: "Amazon India", link: "https://www.google.com/url?q=https://ovantica.com/item" },
+    ] });
+  });
+
+  const query = "best phone with great camera under 1.50 lakhs";
+  const result = await generateRecommendation(parseRequirementDeterministically(query), undefined, query);
+  assert.equal(result.preferences.budget.max, 150000);
+  assert.equal(fetch.mock.callCount(), 3);
+  const offers = result.picks.flatMap(({ product }) => product.sellers).sort((a, b) => a.price - b.price);
+  assert.deepEqual(offers.map(({ platform, price }) => [platform, price]), [["Amazon India", 119999], ["Flipkart", 125000]]);
+  assert.equal(offers[1].url, "https://www.flipkart.com/item/p/123");
+});
+
 test("laptop recommendations prefer the requested price tier and explain cheaper fallbacks", async (t) => {
   env.useMockData = false;
   env.serpApi.key = "test";
@@ -124,19 +171,7 @@ test("laptop recommendations prefer the requested price tier and explain cheaper
   t.mock.method(Groq.Chat.Completions.prototype, "create", async () => ({
     choices: [{ message: { content: '{"products":[]}' } }],
   }));
-  const savedProducts = new Map();
-  t.mock.method(Product, "findOneAndUpdate", async (_, { $set }) => {
-    const saved = { _id: $set.name, ...$set };
-    savedProducts.set(saved._id, saved);
-    return saved;
-  });
-  t.mock.method(PriceHistory, "create", async () => {});
-  t.mock.method(Recommendation, "create", async (data) => ({
-    populate: async () => {},
-    toObject: () => ({ ...data, picks: data.picks.map((pick) => ({
-      ...pick, product: { ...savedProducts.get(pick.product) },
-    })) }),
-  }));
+  mockRecommendationPersistence(t);
 
   let preferredOfferAvailable = true;
   const fetch = t.mock.method(globalThis, "fetch", async (url) => {

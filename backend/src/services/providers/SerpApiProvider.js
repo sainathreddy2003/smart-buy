@@ -48,21 +48,19 @@ export class SerpApiProvider extends ProductProvider {
     return results
       .map((r) => {
         const price = parseInrPrice(r.price ?? r.extracted_price);
-        const link = r.link || r.product_link;
+        const link = r.direct_link || r.link || r.product_link;
         if (!r.title || price == null || !link) return null;
         return {
           name: r.title.slice(0, 120),
           brand: extractBrand(r.title),
           category: category || "smartphone",
-          sellers: [
-            {
-              platform: r.source || "Google Shopping",
-              price,
-              currency: "INR",
-              url: link,
-              availability: true,
-            },
-          ],
+          sellers: [{
+            platform: r.source || "Google Shopping",
+            price,
+            currency: "INR",
+            url: link,
+            availability: true,
+          }],
           image: r.thumbnail,
           rating: r.rating,
           source: "serpapi",

@@ -198,7 +198,7 @@ async function fetchCandidates(requirement, originalQuery) {
     const budgetMessage = budget?.max != null
       ? ` within your ₹${budget.max.toLocaleString("en-IN")} budget`
       : budget?.min ? ` at or above ₹${budget.min.toLocaleString("en-IN")}` : "";
-    throw ApiError.notFound(`No live ${category} listings found${budgetMessage}. Try refining your search.`);
+    throw ApiError.notFound(`No live ${category} listings from Amazon India, Flipkart, or Croma${budgetMessage}. Try refining your search.`);
   }
   const preferred = preferredMinPrice == null ? [] : candidates.filter((product) => product.bestPrice >= preferredMinPrice);
   return {

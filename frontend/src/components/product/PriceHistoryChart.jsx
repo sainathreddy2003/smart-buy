@@ -1,27 +1,46 @@
 import { useState } from "react";
-import { TrendingDown, TrendingUp, Calendar, Info } from "lucide-react";
+import { TrendingDown, TrendingUp, Calendar } from "lucide-react";
 import { formatPrice } from "../../lib/utils";
+
+const observationDate = new Intl.DateTimeFormat("en-IN", {
+  day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata",
+});
+const observationTime = new Intl.DateTimeFormat("en-IN", {
+  day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata",
+});
 
 export function PriceHistoryChart({ history }) {
   const [hoveredIndex, setHoveredIndex] = useState(null);
+  const entries = history?.entries ?? [];
+  const isDemo = entries.some((entry) => entry.source === "seed");
 
-  if (!history || !history.entries || history.entries.length === 0) {
+  if (entries.length < 2) {
+    const first = entries[0];
     return (
-      <div className="rounded-2xl border border-[#e3e0ea] bg-[#FFFFFF] p-8 text-center">
-        <Info size={24} className="mx-auto text-[#696378]" />
-        <p className="mt-3 text-sm text-[#5e596c]">No recorded price history for this product yet.</p>
-        <p className="mt-1 text-xs text-[#696378]">We automatically track live price drops as new seller listings are verified.</p>
+      <div className="rounded-2xl border border-[#e3e0ea] bg-[#FFFFFF] p-6 shadow-sm">
+        <div className="flex items-center gap-2 text-sm font-semibold text-[#191626]">
+          <Calendar size={16} className="text-[#653ad7]" />
+          {first ? (isDemo ? "Demo price observation" : "One recorded price") : "No prices recorded in the last 30 days"}
+        </div>
+        {first && (
+          <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <span className="font-display text-2xl text-[#191626]">{formatPrice(first.price)}</span>
+            <time className="text-sm text-[#5e596c]" dateTime={first.timestamp}>
+              {observationDate.format(new Date(first.timestamp))}
+            </time>
+          </div>
+        )}
+        <p className="mt-2 text-sm text-[#5e596c]">The chart appears once there are two price observations in this window.</p>
       </div>
     );
   }
 
-  const { entries, low, high, current, changePercent } = history;
+  const { low, high, current, changePercent } = history;
   const dropped = changePercent != null && changePercent < 0;
-
-  const prices = entries.map((e) => e.price);
-  const minPrice = Math.min(...prices);
-  const maxPrice = Math.max(...prices);
-  const priceRange = maxPrice - minPrice || 1;
+  const priceRange = high - low;
+  const firstTime = new Date(entries[0].timestamp).getTime();
+  const lastTime = new Date(entries.at(-1).timestamp).getTime();
+  const timeRange = lastTime - firstTime;
 
   const svgWidth = 600;
   const svgHeight = 160;
@@ -30,23 +49,24 @@ export function PriceHistoryChart({ history }) {
   const chartWidth = svgWidth - paddingX * 2;
   const chartHeight = svgHeight - paddingY * 2;
 
-  const points = entries.map((e, i) => {
-    const x = paddingX + (i / Math.max(entries.length - 1, 1)) * chartWidth;
-    const y = svgHeight - paddingY - ((e.price - minPrice) / priceRange) * chartHeight;
-    return { x, y, price: e.price, date: e.date };
+  const points = entries.map(({ price, timestamp }) => {
+    const elapsed = new Date(timestamp).getTime() - firstTime;
+    const x = timeRange ? paddingX + (elapsed / timeRange) * chartWidth : svgWidth / 2;
+    const y = priceRange ? svgHeight - paddingY - ((price - low) / priceRange) * chartHeight : svgHeight / 2;
+    return { x, y, price, timestamp };
   });
 
   const polylinePoints = points.map((p) => `${p.x},${p.y}`).join(" ");
   const areaPoints = `${points[0]?.x || 0},${svgHeight - paddingY} ${polylinePoints} ${points[points.length - 1]?.x || 0},${svgHeight - paddingY}`;
 
-  const activePoint = hoveredIndex !== null ? points[hoveredIndex] : points[points.length - 1];
+  const activePoint = points[hoveredIndex] ?? points.at(-1);
 
   return (
     <div className="rounded-2xl border border-[#e3e0ea] bg-[#FFFFFF] p-6 shadow-sm">
       {/* Header Stat Strip */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 border-b border-[#e3e0ea] pb-5">
         <div>
-          <p className="text-[11px] font-medium uppercase tracking-wider text-[#696378]">Current Best</p>
+          <p className="text-[11px] font-medium uppercase tracking-wider text-[#696378]">Latest Recorded</p>
           <p className="mt-1 font-display text-2xl text-[#191626] tracking-tight">{formatPrice(current)}</p>
         </div>
         <div>
@@ -58,7 +78,7 @@ export function PriceHistoryChart({ history }) {
           <p className="mt-1 font-display text-2xl text-[#5e596c] tracking-tight">{formatPrice(high)}</p>
         </div>
         <div>
-          <p className="text-[11px] font-medium uppercase tracking-wider text-[#696378]">30-Day Volatility</p>
+          <p className="text-[11px] font-medium uppercase tracking-wider text-[#696378]">Since Previous Check</p>
           <div className="mt-1 flex items-center gap-1.5">
             {dropped ? (
               <span className="inline-flex items-center gap-1 text-sm font-semibold text-[#24734F]">
@@ -69,7 +89,7 @@ export function PriceHistoryChart({ history }) {
                 <TrendingUp size={16} /> +{changePercent}% rise
               </span>
             ) : (
-              <span className="text-sm font-medium text-[#5e596c]">Stable pricing</span>
+              <span className="text-sm font-medium text-[#5e596c]">{changePercent === 0 ? "No change" : "Unavailable"}</span>
             )}
           </div>
         </div>
@@ -80,17 +100,15 @@ export function PriceHistoryChart({ history }) {
         {/* Floating Tooltip Indicator */}
         {activePoint && (
           <div
-            className="absolute top-0 z-10 -translate-x-1/2 -translate-y-8 rounded-lg border border-[#653ad7]/40 bg-[#f3f2f7] px-2.5 py-1 text-xs text-[#191626] shadow-lg pointer-events-none transition-all duration-150"
+            className="absolute top-0 z-10 -translate-x-1/2 -translate-y-8 whitespace-nowrap rounded-lg border border-[#653ad7]/40 bg-[#f3f2f7] px-2.5 py-1 text-xs text-[#191626] shadow-lg pointer-events-none transition-all duration-150"
             style={{
-              left: `${(activePoint.x / svgWidth) * 100}%`,
+              left: `clamp(5rem, ${(activePoint.x / svgWidth) * 100}%, calc(100% - 5rem))`,
             }}
           >
             <span className="font-semibold text-[#191626]">{formatPrice(activePoint.price)}</span>
-            {activePoint.date && (
-              <span className="ml-1.5 text-[10px] text-[#5e596c]">
-                {new Date(activePoint.date).toLocaleDateString("en-IN", { month: "short", day: "numeric" })}
-              </span>
-            )}
+            <time className="ml-1.5 text-[10px] text-[#5e596c]" dateTime={activePoint.timestamp}>
+              {observationTime.format(new Date(activePoint.timestamp))}
+            </time>
           </div>
         )}
 
@@ -98,6 +116,7 @@ export function PriceHistoryChart({ history }) {
           viewBox={`0 0 ${svgWidth} ${svgHeight}`}
           className="w-full h-44 overflow-visible"
           preserveAspectRatio="none"
+          aria-label="Recorded prices over time"
         >
           <defs>
             <linearGradient id="amberPriceGradient" x1="0" y1="0" x2="0" y2="1">
@@ -115,7 +134,7 @@ export function PriceHistoryChart({ history }) {
           {/* Shaded Area under Curve */}
           <polygon points={areaPoints} fill="url(#amberPriceGradient)" />
 
-          {/* Smooth Golden Price Line */}
+          {/* Recorded price line */}
           <polyline
             points={polylinePoints}
             fill="none"
@@ -148,8 +167,13 @@ export function PriceHistoryChart({ history }) {
                   r={14}
                   fill="transparent"
                   className="cursor-pointer"
-                  onMouseEnter={() => setHoveredIndex(idx)}
-                  onMouseLeave={() => setHoveredIndex(null)}
+                  tabIndex={0}
+                  aria-label={`${formatPrice(p.price)} on ${observationTime.format(new Date(p.timestamp))}`}
+                  onPointerEnter={() => setHoveredIndex(idx)}
+                  onPointerLeave={() => setHoveredIndex(null)}
+                  onClick={() => setHoveredIndex(idx)}
+                  onFocus={() => setHoveredIndex(idx)}
+                  onBlur={() => setHoveredIndex(null)}
                 />
               </g>
             );
@@ -158,11 +182,11 @@ export function PriceHistoryChart({ history }) {
       </div>
 
       {/* Timeline Footnote */}
-      <div className="mt-4 flex items-center justify-between text-[11px] text-[#696378] border-t border-[#e3e0ea]/60 pt-3">
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-[11px] text-[#696378] border-t border-[#e3e0ea]/60 pt-3">
         <span className="flex items-center gap-1">
-          <Calendar size={12} /> 30-day recorded window
+          <Calendar size={12} /> {isDemo ? "Demo price history" : `${entries.length} observations in the last 30 days`}
         </span>
-        <span>Hover across points to inspect historical prices</span>
+        <span>Hover, tap, or tab to a point to see its price and time</span>
       </div>
     </div>
   );

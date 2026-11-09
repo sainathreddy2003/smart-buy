@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { withIndianOffers } from "../utils/indianRetailers.js";
 
 export const CATEGORIES = [
   "smartphone",
@@ -69,7 +70,7 @@ const productSchema = new mongoose.Schema(
     source: { type: String, enum: ["seed", "mock", "rapidapi", "serpapi"], default: "seed" },
     sourceProductId: { type: String },
   },
-  { timestamps: true }
+  { timestamps: true, toJSON: { transform: (_doc, product) => withIndianOffers(product) } }
 );
 
 productSchema.index({ name: "text", brand: "text", tagline: "text" });

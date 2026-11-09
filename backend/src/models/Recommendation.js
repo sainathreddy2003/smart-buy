@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { sellerSchema } from "./Product.js";
+import { withIndianOffers } from "../utils/indianRetailers.js";
 
 const pickSchema = new mongoose.Schema(
   {
@@ -32,15 +33,18 @@ const recommendationSchema = new mongoose.Schema(
 
 export const Recommendation = mongoose.model("Recommendation", recommendationSchema);
 
-// Old recommendations have no offer snapshot and retain their original shape.
 export function serializeRecommendation(recommendation) {
   const response = recommendation.toObject();
-  for (const pick of response.picks) {
-    if (pick.product && pick.offers?.length) {
-      pick.product.sellers = pick.offers;
-      pick.product.bestPrice = Math.min(...pick.offers.map((offer) => offer.price));
-    }
-    delete pick.offers;
+  const hadPicks = response.picks.length > 0;
+  const { min, max } = response.preferences?.budget ?? {};
+  response.picks = response.picks.flatMap(({ product, offers, ...pick }) => {
+    if (!product?.name) return [];
+    const eligible = (offers ?? product.sellers ?? []).filter(({ price }) => price >= (min ?? 0) && price <= (max ?? Infinity));
+    const filteredProduct = withIndianOffers(product, eligible);
+    return filteredProduct.sellers.length ? [{ ...pick, product: filteredProduct }] : [];
+  });
+  if (hadPicks && !response.picks.length) {
+    response.summary = "This saved search has no eligible offers from Amazon India, Flipkart, or Croma. Start a new search for current offers.";
   }
   return response;
 }

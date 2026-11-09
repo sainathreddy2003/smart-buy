@@ -56,7 +56,7 @@ export function pickBestChoice(products, comparison) {
   for (const p of products) {
     const id = p._id.toString();
     if (wins[id] > wins[bestId]) bestId = id;
-    else if (wins[id] === wins[bestId] && p.bestPrice < products.find((x) => x._id.toString() === bestId).bestPrice) {
+    else if (wins[id] === wins[bestId] && (p.bestPrice ?? Infinity) < (products.find((x) => x._id.toString() === bestId).bestPrice ?? Infinity)) {
       bestId = id;
     }
   }

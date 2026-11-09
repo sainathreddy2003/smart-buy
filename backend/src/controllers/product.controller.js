@@ -70,7 +70,7 @@ export const getProductPrices = asyncHandler(async (req, res) => {
   res.json({
     success: true,
     productId: product._id,
-    bestPrice: product.bestPrice,
+    bestPrice: sellers[0]?.price ?? null,
     sellers,
   });
 });
@@ -92,7 +92,7 @@ export const compareProducts = asyncHandler(async (req, res) => {
   }
 
   // Preserve the order the client asked for.
-  const ordered = productIds.map((id) => products.find((p) => p._id.toString() === id)).filter(Boolean);
+  const ordered = productIds.map((id) => products.find((p) => p._id.toString() === id)?.toJSON()).filter(Boolean);
 
   const comparison = buildComparison(ordered);
   const bestChoice = pickBestChoice(ordered, comparison);

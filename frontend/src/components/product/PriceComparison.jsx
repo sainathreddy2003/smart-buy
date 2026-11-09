@@ -2,7 +2,9 @@ import { ExternalLink, Tag } from "lucide-react";
 import { formatPrice } from "../../lib/utils";
 
 export function PriceComparison({ sellers }) {
-  if (!sellers?.length) return null;
+  if (!sellers?.length) {
+    return <p className="text-sm text-[#5e596c]">No eligible offers from Amazon India, Flipkart, or Croma.</p>;
+  }
   const sorted = [...sellers].sort((a, b) => a.price - b.price);
 
   return (

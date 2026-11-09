@@ -9,11 +9,8 @@ function extractBrand(title) {
 }
 
 /**
- * Live product search via SerpApi's Google Shopping engine — a legitimate,
- * well-documented third-party search API (not scraping), and the primary
- * live provider when configured: SerpApi's free tier (250 searches/month)
- * is far more generous than the other Google-Shopping-shaped fallback here
- * (Google Search Master MEGA, 20/month), so it's tried first.
+ * Google Shopping fallback when Google Search Master has no eligible offers
+ * or is unavailable.
  *
  * SerpApi conveniently returns both a display price string and an already-
  * parsed `extracted_price` number — we still run it through the shared

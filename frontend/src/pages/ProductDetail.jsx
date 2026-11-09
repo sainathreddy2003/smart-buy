@@ -238,8 +238,8 @@ export default function ProductDetail() {
         viewport={{ once: true }}
         className="mt-20"
       >
-        <span className="text-[11px] font-semibold tracking-widest uppercase text-[#653ad7]">Market Volatility</span>
-        <h2 className="mt-2 font-display text-2xl sm:text-3xl text-[#191626] tracking-tight">30-day price trend & history</h2>
+        <span className="text-[11px] font-semibold tracking-widest uppercase text-[#653ad7]">Price tracking</span>
+        <h2 className="mt-2 font-display text-2xl sm:text-3xl text-[#191626] tracking-tight">30-day price history</h2>
         <div className="mt-5">
           <PriceHistoryChart history={priceHistory} />
         </div>

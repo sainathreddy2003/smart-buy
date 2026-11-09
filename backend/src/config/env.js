@@ -26,13 +26,11 @@ export const env = {
     apiKey: process.env.GROQ_API_KEY || null,
     model: process.env.GROQ_MODEL || "openai/gpt-oss-120b",
   },
-  // RapidAPI powers both the live product-search provider ("Real-Time Product
-  // Search") and, via the same key, the YouTube138 API used for review videos.
+  // RapidAPI powers Google Search Master (MEGA), Real-Time Product Search, and YouTube138.
   rapidApi: {
     key: process.env.RAPIDAPI_KEY || null,
   },
-  // SerpApi's Google Shopping engine — the primary live product provider
-  // when configured (well-documented, generous 250 searches/month free tier).
+  // SerpApi's Google Shopping engine is the first fallback when configured.
   serpApi: {
     key: process.env.SERPAPI_KEY || null,
   },

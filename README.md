@@ -48,9 +48,8 @@ ASUS TUF Gaming A15 — 88% match — ₹78,499 (Flipkart, best of 3 sellers)
   your stated requirements. Nothing is AI-hallucinated.
 - **Multi-seller price comparison** — products carry real seller arrays
   (Amazon/Flipkart/Croma/...); best price is always surfaced and highlighted.
-- **Price history** — 30-day low/high and % change vs. the previous recorded
-  price, from a real `PriceHistory` collection (clearly labeled as seeded demo
-  data in this deployment — see Known Limitations).
+- **Price history** — recorded lows, highs, and changes in the last 30 days.
+  The chart shows a trend once there are at least two recorded prices.
 - **YouTube review discovery** — "Watch before you buy," pulling real review
   videos for the exact product via a live API, with a graceful "search
   YouTube instead" fallback if no API key is configured.
@@ -83,7 +82,7 @@ graph TD
     Struct --> REC[Recommendation Engine]
     REC --> PROV[Product Provider Orchestrator]
     PROV --> Names[Search by AI-suggested model name]
-    Names --> Chain[SerpApi / Google Search Master MEGA / RapidAPI Product Search]
+    Names --> Chain[Google Search Master MEGA / SerpApi / RapidAPI Product Search]
     PROV --> Keyword[Keyword search if no named matches fit]
     Keyword --> Chain
     Chain --> Budget[Filter offers by budget]
@@ -108,7 +107,7 @@ backend/src/
     ai.service.js               Groq client + analyzeRequirement() + suggestProductNames()
     recommendation.service.js   deterministic scoring/ranking/explanation engine
     productSearch.service.js    live shopping providers and budget filtering
-    providers/                  ProductProvider interface: SerpApi (primary live), Google Shopping MEGA (rate-limited fallback), RapidAPI Real-Time Search, Ecommerce API (bulk Flipkart), Mock (seeded catalog)
+    providers/                  ProductProvider interface: Google Shopping MEGA (primary), SerpApi and RapidAPI Real-Time Search (fallbacks)
     price.service.js            price comparison + history
     youtube.service.js          YouTube138 review search + fallback
     cache.service.js            in-memory TTL cache
@@ -248,17 +247,17 @@ npm run dev               # http://localhost:5173
 | `MONGO_URI` | **Yes** | Database connection |
 | `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` | **Yes** | Any long random strings |
 | `GROQ_API_KEY` | No | AI requirement parsing + follow-up chat. Falls back to a deterministic parser; chat is disabled without it. |
-| `SERPAPI_KEY` | No | Primary live product search provider (Google Shopping via SerpApi, 250 free searches/month). |
+| `SERPAPI_KEY` | No | Google Shopping fallback through SerpApi. |
 | `RAPIDAPI_KEY` | No | Powers Google Search Master, Real-Time Product Search, and YouTube review search. |
 | `USE_MOCK_DATA` | No (default `true`) | Set `false` to enable live recommendations. |
 | `YOUTUBE_API_KEY` | No | Alternative to RapidAPI for review search, if you have an official Google YouTube Data API v3 key. |
 
 Recommendations require USE_MOCK_DATA=false and at least one shopping key, SERPAPI_KEY or RAPIDAPI_KEY.
 
-Product lookup tries SerpApi Google Shopping, then Google Search Master (MEGA)
-Shopping, then Real-Time Product Search. The first source with qualifying
-offers wins. Empty results, timeouts, and exhausted allowances advance the
-search to the next source.
+Product lookup tries Google Search Master (MEGA) Shopping, then SerpApi Google
+Shopping, then Real-Time Product Search. Providers request India results, and
+only INR offers from Amazon India, Flipkart, and Croma qualify. Empty results,
+timeouts, and exhausted allowances advance the search to the next source.
 
 For RapidAPI shopping, the app reads the reported request allowance and stops
 issuing new calls to a provider when its balance reaches zero. The balance is
@@ -370,10 +369,9 @@ you attach a custom domain, set `CLIENT_URL` to its full HTTPS origin.
   `RAPIDAPI_KEY` switches to live search, but this wasn't load-tested against
   the live API's actual field names beyond the request/response shape I could
   verify directly.
-- **Price history is seed-backfilled**, explicitly marked `source: "seed"` —
-  it's a plausible synthetic 30-day series ending at the real current price,
-  not an observed trend. Live-mode price history (recording real observed
-  prices over time as the app runs) isn't implemented.
+- **Live prices are recorded when a listing is saved as a recommendation.**
+  Listings can start with a single price and build history as they are picked
+  again. Seeded products use a separate, labeled demo series.
 - **Battery-hours and portability normalization are heuristic**, not
   manufacturer benchmarks (documented inline in `normalization.js`) — good
   enough to rank a small catalog sensibly, not a substitute for a real spec

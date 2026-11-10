@@ -8,6 +8,7 @@ const pickSchema = new mongoose.Schema(
     offers: { type: [sellerSchema], default: undefined },
     rank: { type: Number, required: true },
     matchScore: { type: Number, min: 0, max: 100 },
+    rankingSource: { type: String, enum: ["groq"] },
     reasoning: { type: String, required: true },
     tradeoffs: { type: String },
   },

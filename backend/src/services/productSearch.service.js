@@ -16,19 +16,28 @@ const PROVIDER_TIMEOUT_MS = 3200;
 const PRODUCT_SEARCH_TIMEOUT_MS = 5000;
 const SEARCH_CACHE_TTL_MS = 5 * 60 * 1000;
 const ACCESSORY_TITLE = /\b(?:case for|cover for|screen protector|tempered glass|replacement (?:screen|battery)|charger for|sleeve for|strap for)\b/i;
+const MODEL_SUFFIX = /^(?:pro|max|plus|ultra|mini|lite|fe|se|xl|power)\b/;
 
 function normalizedTitle(title) {
   return ` ${title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `;
+}
+
+function matchesModel(title, model, brand) {
+  const name = normalizedTitle(title);
+  const withoutBrand = brand && model.length > brand.length && model.startsWith(brand) ? ` ${model.slice(brand.length)}` : model;
+  const index = name.indexOf(withoutBrand);
+  return index >= 0 && !MODEL_SUFFIX.test(name.slice(index + withoutBrand.length));
 }
 
 export function isLiveModeActive() {
   return !env.useMockData && Boolean(env.rapidApi.key);
 }
 
-export async function searchProducts(query, { budget, modelName, preferredMinPrice, signal, limit = 15, ...opts } = {}) {
+export async function searchProducts(query, { budget, modelName, modelBrand, preferredMinPrice, signal, limit = 15, ...opts } = {}) {
   if (!isLiveModeActive()) return [];
 
   const model = modelName && normalizedTitle(modelName);
+  const brand = modelBrand && normalizedTitle(modelBrand);
   // Look beyond the first few listings before filtering by budget and seller.
   const providerOptions = { ...opts, limit: Math.max(limit, 15) };
   for (const provider of LIVE_PROVIDERS) {
@@ -44,7 +53,7 @@ export async function searchProducts(query, { budget, modelName, preferredMinPri
       });
       const eligible = results.flatMap((result) => {
         if (!result.name || result.category !== opts.category || ACCESSORY_TITLE.test(result.name)) return [];
-        if (model && !normalizedTitle(result.name).includes(model)) return [];
+        if (model && !matchesModel(result.name, model, brand)) return [];
         const sellers = indianOffers((result.sellers || []).filter((offer) =>
           offer.price >= (budget?.min ?? 0) &&
           offer.price <= (budget?.max ?? Infinity)

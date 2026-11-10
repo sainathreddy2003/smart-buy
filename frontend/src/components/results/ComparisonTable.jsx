@@ -44,18 +44,18 @@ export function ComparisonTable({ picks }) {
         </thead>
         <tbody className="divide-y divide-[var(--color-border)]">
           {/* Match Score */}
-          <tr className="bg-[var(--color-surface)]">
+          {picks.some(({ matchScore }) => matchScore != null) && <tr className="bg-[var(--color-surface)]">
             <td className="sticky left-0 z-10 bg-[var(--color-surface)] px-6 py-3.5 font-semibold text-[var(--color-champagne)]">
               Match Score
             </td>
             {picks.map((pick) => (
               <td key={pick.product._id} className="px-6 py-3.5">
                 <span className="inline-flex items-center gap-1 rounded-md bg-[var(--color-amber)]/10 px-2.5 py-1 text-xs font-bold text-[var(--color-amber)]">
-                  {pick.matchScore} / 100
+                  {pick.matchScore == null ? "—" : `${pick.matchScore} / 100`}
                 </span>
               </td>
             ))}
-          </tr>
+          </tr>}
 
           {/* Rating */}
           <tr className="bg-[var(--color-surface)]/60">

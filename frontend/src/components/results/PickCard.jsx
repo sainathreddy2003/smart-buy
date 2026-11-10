@@ -29,7 +29,7 @@ const RANK_CONFIG = {
 };
 
 export function PickCard({ pick, index }) {
-  const { product, matchScore, reasoning, tradeoffs, rank } = pick;
+  const { product, matchScore, rankingSource, reasoning, tradeoffs, rank } = pick;
   const config = RANK_CONFIG[rank] || RANK_CONFIG[3];
   const user = useAuthStore((s) => s.user);
   const { isFavorite, toggleFavorite } = useFavoritesStore();
@@ -54,7 +54,7 @@ export function PickCard({ pick, index }) {
           )}
         >
           {config.highlight && <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-amber)] animate-pulse" />}
-          {config.label}
+          {rankingSource === "groq" ? "Camera shortlist" : config.label}
         </span>
         {user && (
           <button
@@ -96,7 +96,7 @@ export function PickCard({ pick, index }) {
             {formatPrice(product.bestPrice)}
           </p>
         </div>
-        <MatchGauge score={matchScore} />
+        {matchScore != null && <MatchGauge score={matchScore} />}
       </div>
 
       {/* AI Reasoning */}

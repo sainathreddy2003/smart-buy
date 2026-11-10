@@ -154,7 +154,7 @@ products actually sold in India right now, not discontinued ones.
 You will receive a structured shopper requirement (category, budget, use
 cases, priorities). Respond with ONLY valid JSON (no markdown fences, no
 commentary) matching EXACTLY this shape:
-{ "products": [ { "name": string, "brand": string } ] }
+{ "products": [ { "name": string, "brand": string, "cameraFit"?: "strong" | "value" | "uncertain" } ] }
 
 Rules:
 - "name" must be a real, currently-sold brand + model, e.g. "OnePlus 13",
@@ -164,6 +164,12 @@ Rules:
   budget for the given category and use case. If preferredMinPrice is supplied,
   prioritize models likely to sell above that price and within the ceiling.
   Include a cheaper model only as a value alternative.
+- When cameraFocused is true, order the names by fit for the shopper's photo
+  or video needs. Mark cameraFit as "strong" only for a model you would
+  shortlist for those needs. Use "value" for a cheaper compromise and
+  "uncertain" when camera suitability is unclear. For a best-camera request
+  with room for camera flagships, favor established camera-focused models.
+  Battery life, megapixel count, and low price alone don't establish camera fit.
 - Favor products actually common in the Indian market (Samsung, OnePlus,
   Xiaomi, Realme, Motorola, Vivo, Oppo, Apple, Nothing, Asus, Lenovo, HP,
   Dell, Acer, boAt, Noise, JBL, Sony, etc.) over obscure or region-locked ones.
@@ -185,11 +191,10 @@ Rules:
  * live keyword search if this returns
  * nothing usable, so this step is an optimization, never a hard dependency.
  */
-export async function suggestProductNames(requirement, searchSignal, preferredMinPrice) {
+export async function suggestProductNames(requirement, { preferredMinPrice, originalQuery, cameraFocused } = {}) {
   if (!client) return null;
 
-  const timeout = AbortSignal.timeout(2000);
-  const signal = searchSignal ? AbortSignal.any([searchSignal, timeout]) : timeout;
+  const signal = AbortSignal.timeout(3500);
   try {
     const result = await completeJSON({
       system: PRODUCT_SUGGESTION_SYSTEM_PROMPT,
@@ -197,6 +202,8 @@ export async function suggestProductNames(requirement, searchSignal, preferredMi
         category: requirement.category,
         budget: requirement.budget,
         preferredMinPrice,
+        originalQuery,
+        cameraFocused,
         useCases: requirement.useCases,
         priorities: requirement.priorities,
         keywords: requirement.keywords,
@@ -205,7 +212,7 @@ export async function suggestProductNames(requirement, searchSignal, preferredMi
       signal,
     });
     const parsed = productSuggestionSchema.safeParse(result);
-    if (!parsed.success || parsed.data.products.length === 0) {
+    if (!parsed.success) {
       console.warn("[AI] suggestProductNames returned nothing usable");
       return null;
     }

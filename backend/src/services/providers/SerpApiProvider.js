@@ -9,8 +9,7 @@ function extractBrand(title) {
 }
 
 /**
- * Google Shopping fallback when Google Search Master has no eligible offers
- * or is unavailable.
+ * Primary Google Shopping discovery for India.
  *
  * SerpApi conveniently returns both a display price string and an already-
  * parsed `extracted_price` number — we still run it through the shared
@@ -33,15 +32,21 @@ export class SerpApiProvider extends ProductProvider {
     url.searchParams.set("api_key", env.serpApi.key);
     url.searchParams.set("gl", "in");
     url.searchParams.set("hl", "en");
+    url.searchParams.set("google_domain", "google.co.in");
 
     const response = await fetch(url, { signal });
-    if (response.status === 429) this.#rateLimitedUntil = Date.now() + 60_000;
+    if (response.status === 429) {
+      const { error } = await response.json().catch(() => ({}));
+      const delay = /run out of searches/i.test(error ?? "") ? 60 * 60_000 : 60_000;
+      this.#rateLimitedUntil = Date.now() + delay;
+    }
     if (!response.ok) {
       throw new Error(`SerpApi request failed (${response.status})`);
     }
 
     const json = await response.json();
-    if (json.error) throw new Error(`SerpApi error: ${json.error}`);
+    if (typeof json.error === "string" && /hasn't returned any results/i.test(json.error)) return [];
+    if (json.error) throw new Error("SerpApi returned an error for this search");
 
     const results = json.shopping_results || [];
 

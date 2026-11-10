@@ -14,6 +14,7 @@
  * @property {number} [rating]
  * @property {string} source - which provider produced this record
  * @property {string} [sourceProductId]
+ * @property {string} [shoppingHistoryId] Product ID issued by Real-Time Product Search.
  *
  * @interface ProductProvider
  * @method search(query: string, opts: {category?: string, limit?: number}) => Promise<ProviderProduct[]>

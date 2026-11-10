@@ -6,16 +6,7 @@ import { parseInrPrice } from "../../utils/normalization.js";
 const BASE_URL = "https://real-time-product-search.p.rapidapi.com";
 
 /**
- * Live product search via RapidAPI's "Real-Time Product Search" API — search
- * results aggregated from real retailers (Amazon, eBay, Walmart, Best Buy,
- * Target, and others), reached through a legitimate subscribed API, not
- * scraping. Only active when RAPIDAPI_KEY is configured and USE_MOCK_DATA is
- * false; otherwise the search service falls back to MockProductProvider.
- *
- * Every field below is taken directly from the provider response. If a
- * result has no real product URL, it's dropped rather than given a
- * fabricated one — the spec is explicit that seller URLs must never be
- * invented.
+ * Google Shopping discovery through Real-Time Product Search for India.
  */
 export class RapidApiProductProvider extends ProductProvider {
   async search(query, { category, signal, limit = 20 } = {}) {
@@ -25,7 +16,7 @@ export class RapidApiProductProvider extends ProductProvider {
 
     const url = new URL(`${BASE_URL}/search`);
     url.searchParams.set("q", category ? `${query} ${category}` : query);
-    url.searchParams.set("limit", String(limit));
+    url.searchParams.set("limit", String(Math.min(limit, 40)));
     url.searchParams.set("page", "1");
     url.searchParams.set("country", "in");
     url.searchParams.set("language", "en");
@@ -40,7 +31,10 @@ export class RapidApiProductProvider extends ProductProvider {
     }
 
     const json = await response.json();
-    const results = json?.data?.products || [];
+    if (json?.status === "ERROR" || !Array.isArray(json?.data?.products)) {
+      throw new Error("Real-Time Product Search returned invalid product data");
+    }
+    const results = json.data.products;
 
     return results
       .map((r) => {
@@ -68,6 +62,7 @@ export class RapidApiProductProvider extends ProductProvider {
           rating: r.product_rating,
           source: "rapidapi",
           sourceProductId: r.product_id,
+          shoppingHistoryId: typeof r.product_id === "string" ? r.product_id : undefined,
         };
       })
       .filter(Boolean)

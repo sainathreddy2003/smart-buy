@@ -26,11 +26,12 @@ export const env = {
     apiKey: process.env.GROQ_API_KEY || null,
     model: process.env.GROQ_MODEL || "openai/gpt-oss-120b",
   },
-  // RapidAPI powers Google Search Master (MEGA), Real-Time Product Search, and YouTube138.
+  // RapidAPI powers retailer quotes, discovery fallbacks, and optional YouTube138.
   rapidApi: {
     key: process.env.RAPIDAPI_KEY || null,
+    flipkartSearchConfig: process.env.FLIPKART_SEARCH_CONFIG || null,
   },
-  // SerpApi's Google Shopping engine is the first fallback when configured.
+  // Primary discovery through SerpApi's Google Shopping engine.
   serpApi: {
     key: process.env.SERPAPI_KEY || null,
   },

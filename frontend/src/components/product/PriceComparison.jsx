@@ -1,11 +1,10 @@
 import { ExternalLink, Tag } from "lucide-react";
 import { formatPrice } from "../../lib/utils";
 
-export function PriceComparison({ sellers }) {
-  if (!sellers?.length) {
-    return <p className="text-sm text-[#5e596c]">No eligible offers from Amazon India, Flipkart, or Croma.</p>;
-  }
+export function PriceComparison({ sellers = [], showMissing = false }) {
   const sorted = [...sellers].sort((a, b) => a.price - b.price);
+  const missing = showMissing ? ["Amazon India", "Flipkart"].filter((store) => !sorted.some(({ platform }) => platform === store)) : [];
+  if (!sorted.length && !missing.length) return null;
 
   return (
     <div className="overflow-hidden rounded-2xl border border-[#e3e0ea] bg-[#FFFFFF] shadow-sm">
@@ -47,6 +46,12 @@ export function PriceComparison({ sellers }) {
               <ExternalLink size={12} />
             </a>
           </div>
+        </div>
+      ))}
+      {missing.map((store) => (
+        <div key={store} className="flex items-center justify-between gap-4 border-b border-[#e3e0ea]/80 px-6 py-4 text-xs text-[#5e596c] last:border-b-0 sm:text-sm">
+          <span>{store}</span>
+          <span>No verified price</span>
         </div>
       ))}
     </div>

@@ -4,13 +4,14 @@ import { PriceHistory } from "../models/PriceHistory.js";
 import { ApiError } from "../utils/ApiError.js";
 import { parseRequirementDeterministically } from "../utils/deterministicParser.js";
 import { searchProducts, isLiveModeActive } from "./productSearch.service.js";
+import { verifyRetailerPrices } from "./retailerPrices.service.js";
 import { suggestProductNames } from "./ai.service.js";
 import { mergeSellerOffers } from "../utils/duplicateDetection.js";
 import { parseRAM, parseStorage, tierFromCPU, tierFromGPU } from "../utils/normalization.js";
 
 const MAX_SUGGESTED_PRODUCTS = 5;
-const NAMED_SEARCH_TIMEOUT_MS = 7000;
-const KEYWORD_SEARCH_TIMEOUT_MS = 7500;
+const NAMED_SEARCH_TIMEOUT_MS = 17000;
+const KEYWORD_SEARCH_TIMEOUT_MS = 15000;
 const RESULTS_PER_SUGGESTED_PRODUCT = 2;
 const PREFERRED_LAPTOP_BUDGET_RATIO = 0.65;
 const LOW_COST_REQUEST = /\b(?:cheapest|cheap|affordable|budget[- ]friendly|best value|lower[- ]cost|cheaper|spend less|lowest price)\b/i;
@@ -103,6 +104,7 @@ function toVirtualCandidate(result, category) {
     useCases: [],
     source: result.source,
     sourceProductId: result.sourceProductId,
+    shoppingHistoryId: result.shoppingHistoryId,
   };
 }
 
@@ -204,12 +206,11 @@ async function fetchCandidates(requirement, originalQuery) {
     const budgetMessage = budget?.max != null
       ? ` within your ₹${budget.max.toLocaleString("en-IN")} budget`
       : budget?.min ? ` at or above ₹${budget.min.toLocaleString("en-IN")}` : "";
-    throw ApiError.notFound(`I couldn’t verify a live ${category} offer from Amazon India, Flipkart, or Croma${budgetMessage}.`);
+    throw ApiError.notFound(`I couldn’t find a ${category} to check against Amazon India and Flipkart${budgetMessage}.`);
   }
   const preferred = preferredMinPrice == null ? [] : candidates.filter((product) => product.bestPrice >= preferredMinPrice);
   return {
     candidates: preferred.length ? preferred : candidates,
-    lowerPriceFallback: preferredMinPrice != null && !preferred.length,
     preferredMinPrice,
   };
 }
@@ -235,6 +236,7 @@ async function persistChosenPicks(topEntries) {
         rating: product.rating,
         images: product.images,
         normalizedSpecs: product.normalizedSpecs,
+        ...(product.shoppingHistoryId && { shoppingHistoryId: product.shoppingHistoryId }),
       },
     }, { upsert: true, returnDocument: "after", runValidators: true });
     await PriceHistory.create({ product: saved._id, platform: offer.platform, price: offer.price, source: "live" });
@@ -412,11 +414,7 @@ function generateTradeoff(product, requirement, candidates, rankedScores) {
 
 export { scoreProduct };
 
-export async function generateRecommendation(rawBody, userId, originalQuery) {
-  const requirement = normalizeToRequirement(rawBody);
-  const { candidates, lowerPriceFallback, preferredMinPrice } = await fetchCandidates(requirement, originalQuery);
-  console.log(`[SEARCH] ${candidates.length} candidates fetched for category "${requirement.category}"`);
-
+function rankProducts(candidates, requirement) {
   const candidateMaxes = {
     ramGB: Math.max(...candidates.map((c) => c.normalizedSpecs?.ramGB || 0)),
     storageGB: Math.max(...candidates.map((c) => c.normalizedSpecs?.storageGB || 0)),
@@ -428,16 +426,35 @@ export async function generateRecommendation(rawBody, userId, originalQuery) {
     ...candidates.map((c) => specScore(c, requirement, candidateMaxes) / Math.max(1, c.bestPrice))
   );
 
-  const scored = candidates
+  return candidates
     .map((product) => ({ product, ...scoreProduct(product, requirement, candidateMaxes) }))
     .sort((a, b) => b.final - a.final);
+}
 
-  const top = scored.slice(0, 3);
+export async function generateRecommendation(rawBody, userId, originalQuery) {
+  const requirement = normalizeToRequirement(rawBody);
+  const { candidates, preferredMinPrice } = await fetchCandidates(requirement, originalQuery);
+  console.log(`[SEARCH] ${candidates.length} candidates fetched for category "${requirement.category}"`);
+
+  const shortlisted = rankProducts(candidates, requirement).slice(0, 3);
+  const checked = await Promise.all(shortlisted.map(async ({ product }) => {
+    const sellers = await verifyRetailerPrices(product, requirement.budget);
+    return sellers.length ? { ...product, sellers, bestPrice: sellers[0].price } : null;
+  }));
+  const verified = checked.filter(Boolean);
+  if (!verified.length) {
+    throw ApiError.notFound("I couldn’t verify an in-budget price for the shortlisted products on Amazon India or Flipkart.");
+  }
+
+  const preferred = preferredMinPrice == null ? [] : verified.filter((product) => product.bestPrice >= preferredMinPrice);
+  const lowerPriceFallback = preferredMinPrice != null && !preferred.length;
+  const top = rankProducts(preferred.length ? preferred : verified, requirement);
+
   console.log(`[RECOMMENDER] Top score: ${top[0]?.final ?? "n/a"}`);
 
   const explanations = top.map((entry) => ({
     reasoning: generateExplanation(entry.product, requirement).join(" • "),
-    tradeoffs: generateTradeoff(entry.product, requirement, candidates, scored),
+    tradeoffs: generateTradeoff(entry.product, requirement, verified, top),
   }));
 
   // Only now — after we know exactly which 3 products are actually being

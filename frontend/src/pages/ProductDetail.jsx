@@ -22,7 +22,7 @@ export default function ProductDetail() {
   const navigate = useNavigate();
   const [product, setProduct] = useState(null);
   const [related, setRelated] = useState([]);
-  const [priceHistory, setPriceHistory] = useState(null);
+  const [historyResult, setHistoryResult] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeColor, setActiveColor] = useState(null);
@@ -36,15 +36,13 @@ export default function ProductDetail() {
     setLoading(true);
     setError(null);
     try {
-      const [{ data: productData }, { data: relatedData }, { data: historyData }] = await Promise.all([
+      const [{ data: productData }, { data: relatedData }] = await Promise.all([
         api.get(`/products/${id}`),
         api.get(`/products/${id}/related`),
-        api.get(`/products/${id}/history`),
       ]);
       setProduct(productData.product);
       setActiveColor(productData.product.colors?.[0] || null);
       setRelated(relatedData.products);
-      setPriceHistory(historyData);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -56,6 +54,18 @@ export default function ProductDetail() {
     load();
     window.scrollTo({ top: 0 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    api.get(`/products/${id}/history`, { signal: controller.signal })
+      .then(({ data }) => {
+        if (!controller.signal.aborted) setHistoryResult({ id, data });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setHistoryResult({ id, failed: true });
+      });
+    return () => controller.abort();
   }, [id]);
 
   if (loading) return <PageLoader label="Fetching product intelligence..." />;
@@ -227,7 +237,7 @@ export default function ProductDetail() {
         <span className="text-[11px] font-semibold tracking-widest uppercase text-[#653ad7]">Live Market Deals</span>
         <h2 className="mt-2 font-display text-2xl sm:text-3xl text-[#191626] tracking-tight">Multi-seller price comparison</h2>
         <div className="mt-5">
-          <PriceComparison sellers={product.sellers} />
+          <PriceComparison sellers={product.sellers} showMissing={product.source !== "seed" && product.source !== "mock"} />
         </div>
       </motion.div>
 
@@ -241,7 +251,13 @@ export default function ProductDetail() {
         <span className="text-[11px] font-semibold tracking-widest uppercase text-[#653ad7]">Price tracking</span>
         <h2 className="mt-2 font-display text-2xl sm:text-3xl text-[#191626] tracking-tight">30-day price history</h2>
         <div className="mt-5">
-          <PriceHistoryChart history={priceHistory} />
+          {historyResult?.id !== id ? (
+            <p role="status" className="text-sm text-[#5e596c]">Loading price history…</p>
+          ) : historyResult.failed ? (
+            <p className="text-sm text-[#5e596c]">Price history is temporarily unavailable.</p>
+          ) : (
+            <PriceHistoryChart history={historyResult.data} />
+          )}
         </div>
       </motion.div>
 

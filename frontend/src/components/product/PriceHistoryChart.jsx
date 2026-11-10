@@ -13,6 +13,7 @@ export function PriceHistoryChart({ history }) {
   const [hoveredIndex, setHoveredIndex] = useState(null);
   const entries = history?.entries ?? [];
   const isDemo = entries.some((entry) => entry.source === "seed");
+  const includesProviderHistory = entries.some((entry) => entry.source === "rapidapi");
 
   if (entries.length < 2) {
     const first = entries[0];
@@ -49,11 +50,13 @@ export function PriceHistoryChart({ history }) {
   const chartWidth = svgWidth - paddingX * 2;
   const chartHeight = svgHeight - paddingY * 2;
 
-  const points = entries.map(({ price, timestamp }) => {
-    const elapsed = new Date(timestamp).getTime() - firstTime;
+  const points = entries.map(({ price, timestamp, source }) => {
+    const date = new Date(timestamp);
+    const elapsed = date.getTime() - firstTime;
     const x = timeRange ? paddingX + (elapsed / timeRange) * chartWidth : svgWidth / 2;
     const y = priceRange ? svgHeight - paddingY - ((price - low) / priceRange) * chartHeight : svgHeight / 2;
-    return { x, y, price, timestamp };
+    const dateLabel = (source === "rapidapi" ? observationDate : observationTime).format(date);
+    return { x, y, price, timestamp, dateLabel };
   });
 
   const polylinePoints = points.map((p) => `${p.x},${p.y}`).join(" ");
@@ -107,7 +110,7 @@ export function PriceHistoryChart({ history }) {
           >
             <span className="font-semibold text-[#191626]">{formatPrice(activePoint.price)}</span>
             <time className="ml-1.5 text-[10px] text-[#5e596c]" dateTime={activePoint.timestamp}>
-              {observationTime.format(new Date(activePoint.timestamp))}
+              {activePoint.dateLabel}
             </time>
           </div>
         )}
@@ -168,7 +171,7 @@ export function PriceHistoryChart({ history }) {
                   fill="transparent"
                   className="cursor-pointer"
                   tabIndex={0}
-                  aria-label={`${formatPrice(p.price)} on ${observationTime.format(new Date(p.timestamp))}`}
+                  aria-label={`${formatPrice(p.price)} on ${p.dateLabel}`}
                   onPointerEnter={() => setHoveredIndex(idx)}
                   onPointerLeave={() => setHoveredIndex(null)}
                   onClick={() => setHoveredIndex(idx)}
@@ -186,7 +189,7 @@ export function PriceHistoryChart({ history }) {
         <span className="flex items-center gap-1">
           <Calendar size={12} /> {isDemo ? "Demo price history" : `${entries.length} observations in the last 30 days`}
         </span>
-        <span>Hover, tap, or tab to a point to see its price and time</span>
+        <span>{includesProviderHistory ? "Includes Google Shopping price history" : "Hover, tap, or tab to a point to see its price and time"}</span>
       </div>
     </div>
   );

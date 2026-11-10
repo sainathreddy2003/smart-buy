@@ -1,7 +1,9 @@
 import { PriceHistory } from "../models/PriceHistory.js";
 import { indianOffers, indianRetailerName } from "../utils/indianRetailers.js";
+import { getRapidApiPriceHistory } from "./providers/RapidApiPriceHistoryProvider.js";
 
 const HISTORY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+const INDIA_DAY_FORMAT = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" });
 
 /** Sellers sorted cheapest-first, with the best one flagged. */
 export function comparePrices(product) {
@@ -12,16 +14,31 @@ export function comparePrices(product) {
  * 30-day low/high + % change vs the immediately preceding recorded price.
  * A single recorded price has no previous observation to compare against.
  */
-export async function getPriceHistory(productId) {
+export async function getPriceHistory(productId, shoppingHistoryId) {
   const now = Date.now();
+  const from = now - HISTORY_WINDOW_MS;
   const recorded = await PriceHistory.find({
     product: productId,
-    timestamp: { $gte: new Date(now - HISTORY_WINDOW_MS), $lte: new Date(now) },
+    timestamp: { $gte: new Date(from), $lte: new Date(now) },
   }).sort({ timestamp: 1, _id: 1 }).lean();
   const entries = recorded.flatMap(({ platform, price, timestamp, source = "seed" }) => {
     const retailer = indianRetailerName(platform === "Amazon" && source === "seed" ? "Amazon India" : platform);
     return retailer ? [{ platform: retailer, price, timestamp, source }] : [];
   });
+
+  const recordedDays = new Set(entries.map(({ timestamp }) => INDIA_DAY_FORMAT.format(new Date(timestamp))));
+  if (shoppingHistoryId && recordedDays.size < 2) {
+    try {
+      const historical = await getRapidApiPriceHistory(shoppingHistoryId);
+      for (const entry of historical) {
+        const timestamp = Date.parse(`${entry.timestamp}T00:00:00+05:30`);
+        if (timestamp >= from && timestamp <= now && !recordedDays.has(INDIA_DAY_FORMAT.format(timestamp))) entries.push(entry);
+      }
+      entries.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    } catch (err) {
+      console.warn(`[PRICE HISTORY] ${err.message}`);
+    }
+  }
 
   if (entries.length === 0) {
     return { entries: [], limited: true, low: null, high: null, current: null, changePercent: null };

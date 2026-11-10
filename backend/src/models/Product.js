@@ -69,6 +69,7 @@ const productSchema = new mongoose.Schema(
     // Provenance — which provider produced this record. Never fabricated.
     source: { type: String, enum: ["seed", "mock", "rapidapi", "serpapi"], default: "seed" },
     sourceProductId: { type: String },
+    shoppingHistoryId: { type: String },
   },
   { timestamps: true, toJSON: { transform: (_doc, product) => withIndianOffers(product) } }
 );

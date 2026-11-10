@@ -165,9 +165,7 @@ export function AppleProductCard({ product, index = 0, rank, matchScore, reasoni
               <span className="text-lg font-bold text-[#191626] tracking-tight">
                 {formatPrice(product.bestPrice)}
               </span>
-              {product.sellers?.[0] && (
-                <p className="text-[10px] text-[#696378]">best price at {product.sellers[0].platform}</p>
-              )}
+              {product.sellers?.[0] && <p className="text-[10px] text-[#696378]">best price at {product.sellers[0].platform}</p>}
             </div>
             {product.rating > 0 && (
               <div className="flex items-center gap-1 text-xs text-[#5e596c] bg-[#f3f2f7] px-2 py-0.5 rounded-full border border-[#e3e0ea]">
@@ -176,6 +174,19 @@ export function AppleProductCard({ product, index = 0, rank, matchScore, reasoni
               </div>
             )}
           </div>
+          {rank && (
+            <dl className="mt-2 space-y-1 text-xs text-[#5e596c]">
+              {["Amazon India", "Flipkart"].map((store) => {
+                const offer = product.sellers?.find(({ platform }) => platform === store);
+                return (
+                  <div key={store} className="flex justify-between gap-2">
+                    <dt>{store}</dt>
+                    <dd>{offer ? formatPrice(offer.price) : "No verified price"}</dd>
+                  </div>
+                );
+              })}
+            </dl>
+          )}
 
           {/* Interactive Feature Accordion */}
           <div className="mt-3 pt-2.5 border-t border-[#e3e0ea]/60">

@@ -3,32 +3,25 @@ import { fetchRapidApiShopping } from "./rapidApiShopping.js";
 import { ProductProvider } from "./ProductProvider.js";
 import { parseInrPrice } from "../../utils/normalization.js";
 
-const BASE_URL = "https://google-search-master-mega.p.rapidapi.com/shopping";
-
 function extractBrand(title) {
   return String(title || "").split(/\s+/)[0] || "Unknown";
 }
 
 /**
- * Live product search via RapidAPI's "Google Search Master (MEGA)" Shopping
- * endpoint — real, current Google Shopping results for India (gl=in),
- * matched directly against the shopper's natural-language query rather than
- * a bag-of-keywords search. Preferred over RapidApiProductProvider when
- * both are configured, since it responds better to full free-text queries
- * and returns India-local sellers/pricing directly.
- *
- * Every field is taken verbatim from the response — prices, sellers, and
- * links are never invented. `link` is a Google Shopping results URL (not a
- * direct retailer deep link), which is what the API actually returns; it is
- * real and resolves to real listings, not a fabricated URL.
+ * Google Search Master Shopping via either RapidAPI subscription.
  */
 export class GoogleShoppingProvider extends ProductProvider {
+  constructor({ mega = false } = {}) {
+    super();
+    this.host = mega ? "google-search-master-mega.p.rapidapi.com" : "google-search-master.p.rapidapi.com";
+  }
+
   async search(query, { category, signal, limit = 15 } = {}) {
     if (!env.rapidApi.key) {
       throw new Error("GoogleShoppingProvider requires RAPIDAPI_KEY to be configured");
     }
 
-    const url = new URL(BASE_URL);
+    const url = new URL(`https://${this.host}/shopping`);
     url.searchParams.set("q", category ? `${query} ${category}` : query);
     url.searchParams.set("gl", "in");
     url.searchParams.set("hl", "en");
@@ -39,11 +32,12 @@ export class GoogleShoppingProvider extends ProductProvider {
     const response = await fetchRapidApiShopping(url, { signal });
 
     if (!response.ok) {
-      throw new Error(`Google Search Master (MEGA) request failed (${response.status})`);
+      throw new Error(`Google Search Master request failed (${response.status})`);
     }
 
     const json = await response.json();
-    const results = json.shopping || [];
+    if (!Array.isArray(json.shopping)) throw new Error("Google Search Master returned invalid shopping data");
+    const results = json.shopping;
 
     return results
       .map((r) => {

@@ -82,11 +82,12 @@ graph TD
     Struct --> REC[Recommendation Engine]
     REC --> PROV[Product Provider Orchestrator]
     PROV --> Names[Search by AI-suggested model name]
-    Names --> Chain[Google Search Master MEGA / SerpApi / RapidAPI Product Search]
+    Names --> Chain[SerpApi / Real-Time Product Search / Google Search Master MEGA / Google Search Master]
     PROV --> Keyword[Keyword search if no named matches fit]
     Keyword --> Chain
     Chain --> Budget[Filter offers by budget]
-    Budget --> Score[Deterministic Scoring + Explanation]
+    Budget --> Quotes[Check shortlisted products on Amazon India and Flipkart]
+    Quotes --> Score[Rank by verified offers and explain]
     Score --> Persist[Save up to three picks with their qualifying offers]
     Score --> Price[Price Comparison + History]
     Score --> YT[YouTube138 Review Search]
@@ -107,7 +108,7 @@ backend/src/
     ai.service.js               Groq client + analyzeRequirement() + suggestProductNames()
     recommendation.service.js   deterministic scoring/ranking/explanation engine
     productSearch.service.js    live shopping providers and budget filtering
-    providers/                  ProductProvider interface: Google Shopping MEGA (primary), SerpApi and RapidAPI Real-Time Search (fallbacks)
+    providers/                  SerpApi and RapidAPI discovery, Amazon India and Flipkart quotes
     price.service.js            price comparison + history
     youtube.service.js          YouTube138 review search + fallback
     cache.service.js            in-memory TTL cache
@@ -247,17 +248,32 @@ npm run dev               # http://localhost:5173
 | `MONGO_URI` | **Yes** | Database connection |
 | `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` | **Yes** | Any long random strings |
 | `GROQ_API_KEY` | No | AI requirement parsing + follow-up chat. Falls back to a deterministic parser; chat is disabled without it. |
-| `SERPAPI_KEY` | No | Google Shopping fallback through SerpApi. |
-| `RAPIDAPI_KEY` | No | Powers Google Search Master, Real-Time Product Search, and YouTube review search. |
+| `SERPAPI_KEY` | No | Primary discovery through SerpApi's Google Shopping engine. |
+| `RAPIDAPI_KEY` | For live recommendations | Amazon India and Flipkart quotes, Real-Time Product Search, both Google Search Master fallbacks, and optional YouTube review search. |
+| `FLIPKART_SEARCH_CONFIG` | For Flipkart quotes | Keyword-search GET endpoint and response mapping for the Flipkart RapidAPI subscription. |
 | `USE_MOCK_DATA` | No (default `true`) | Set `false` to enable live recommendations. |
 | `YOUTUBE_API_KEY` | No | Alternative to RapidAPI for review search, if you have an official Google YouTube Data API v3 key. |
 
-Recommendations require USE_MOCK_DATA=false and at least one shopping key, SERPAPI_KEY or RAPIDAPI_KEY.
+Live recommendations require `USE_MOCK_DATA=false` and `RAPIDAPI_KEY`.
+Discovery starts with SerpApi Google Shopping for India. If a provider is
+unavailable or over quota, the order is Real-Time Product Search, Google
+Search Master MEGA, then standard Google Search Master. A successful empty
+result stays with the responding provider.
 
-Product lookup tries Google Search Master (MEGA) Shopping, then SerpApi Google
-Shopping, then Real-Time Product Search. Providers request India results, and
-only INR offers from Amazon India, Flipkart, and Croma qualify. Empty results,
-timeouts, and exhausted allowances advance the search to the next source.
+SmartBuy checks Amazon India and Flipkart in parallel for up to three shortlisted
+products. It displays in-budget INR quotes from the retailer APIs and leaves a
+store's price blank when it cannot verify a matching offer. The chart tracks
+the lowest verified price at each recorded check. For listings discovered
+through Real-Time Product Search, the chart can fill sparse history with dated
+India offers from the same provider when they are available.
+
+Set `FLIPKART_SEARCH_CONFIG` to a JSON object using the values shown in the
+Flipkart RapidAPI playground. `url` is the HTTPS search endpoint, including
+any fixed query parameters. `queryParam` is the keyword parameter name.
+`results` is the dot-separated path to the result array, or omit it for a
+top-level array. `name`, `price`, and `link` are field paths within each result.
+`currency` and `availability` are optional field paths. Keep the API key in
+`RAPIDAPI_KEY`.
 
 For RapidAPI shopping, the app reads the reported request allowance and stops
 issuing new calls to a provider when its balance reaches zero. The balance is

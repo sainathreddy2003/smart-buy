@@ -14,11 +14,11 @@ export function comparePrices(product) {
  * 30-day low/high + % change vs the immediately preceding recorded price.
  * A single recorded price has no previous observation to compare against.
  */
-export async function getPriceHistory(productId, shoppingHistoryId) {
+export async function getPriceHistory(product) {
   const now = Date.now();
   const from = now - HISTORY_WINDOW_MS;
   const recorded = await PriceHistory.find({
-    product: productId,
+    product: product._id,
     timestamp: { $gte: new Date(from), $lte: new Date(now) },
   }).sort({ timestamp: 1, _id: 1 }).lean();
   const entries = recorded.flatMap(({ platform, price, timestamp, source = "seed" }) => {
@@ -27,17 +27,15 @@ export async function getPriceHistory(productId, shoppingHistoryId) {
   });
 
   const recordedDays = new Set(entries.map(({ timestamp }) => INDIA_DAY_FORMAT.format(new Date(timestamp))));
-  if (shoppingHistoryId && recordedDays.size < 2) {
-    try {
-      const historical = await getRapidApiPriceHistory(shoppingHistoryId);
-      for (const entry of historical) {
-        const timestamp = Date.parse(`${entry.timestamp}T00:00:00+05:30`);
-        if (timestamp >= from && timestamp <= now && !recordedDays.has(INDIA_DAY_FORMAT.format(timestamp))) entries.push(entry);
-      }
-      entries.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-    } catch (err) {
-      console.warn(`[PRICE HISTORY] ${err.message}`);
+  try {
+    const historical = await getRapidApiPriceHistory(product);
+    for (const entry of historical) {
+      const timestamp = Date.parse(`${entry.timestamp}T00:00:00+05:30`);
+      if (timestamp >= from && timestamp <= now && !recordedDays.has(entry.timestamp)) entries.push(entry);
     }
+    entries.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  } catch (err) {
+    console.warn(`[PRICE HISTORY] ${err.message}`);
   }
 
   if (entries.length === 0) {

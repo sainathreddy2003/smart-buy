@@ -79,7 +79,7 @@ export const getProductPriceHistory = asyncHandler(async (req, res) => {
   const product = await Product.findById(req.params.id);
   if (!product) throw ApiError.notFound("Product not found");
 
-  const history = await getPriceHistory(product._id, product.shoppingHistoryId);
+  const history = await getPriceHistory(product);
   res.json({ success: true, productId: product._id, ...history });
 });
 

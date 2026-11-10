@@ -55,6 +55,33 @@ function resolveIndianOffer({ url, platform }) {
   if (googleRetailer) return { platform: googleRetailer, url };
 }
 
+export function indianListingKey(offer) {
+  const link = parseOfferLink(resolveIndianOffer(offer)?.url);
+  const retailer = directRetailer(link);
+  if (retailer === "Amazon India") {
+    const asin = link.pathname.match(/\/(?:dp|gp\/product|gp\/aw\/d)\/([a-z0-9]{10})(?:\/|$)/i)?.[1];
+    if (asin) return `amazon:${asin.toUpperCase()}`;
+  }
+  if (retailer === "Flipkart") {
+    const item = link.pathname.match(/\/p\/([a-z0-9]+)(?:\/|$)/i)?.[1];
+    const pid = link.searchParams.get("pid");
+    if (item) return pid ? `flipkart:pid:${pid.toUpperCase()}` : `flipkart:item:${item.toLowerCase()}`;
+  }
+}
+
+export function googleShoppingListing(offer) {
+  const verified = resolveIndianOffer(offer);
+  if (!verified || !["Amazon India", "Flipkart"].includes(verified.platform)) return;
+  const link = parseOfferLink(verified.url);
+  if (directRetailer(link) || link.searchParams.get("ibp") !== "oshop") return;
+  const fields = (link.searchParams.get("prds") ?? "").split(",");
+  const offerId = fields.find((field) => /^headlineOfferDocid:\d{1,24}$/i.test(field))?.split(":")[1];
+  if (!offerId) return;
+  const productId = fields.filter((field) =>
+    /^(?:catalogid|productid|headlineOfferDocid|gpcid|imageDocid|mid):\d{0,24}$/i.test(field)).join(",");
+  return { productId, offerId, platform: verified.platform };
+}
+
 export function indianOffers(offers = []) {
   const byRetailer = new Map();
   for (const offer of offers) {

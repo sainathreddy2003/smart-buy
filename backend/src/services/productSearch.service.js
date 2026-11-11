@@ -18,14 +18,24 @@ const SEARCH_CACHE_TTL_MS = 5 * 60 * 1000;
 const ACCESSORY_TITLE = /\b(?:case for|cover for|screen protector|tempered glass|replacement (?:screen|battery)|charger for|sleeve for|strap for)\b/i;
 const DEVICE_ACCESSORY_SUFFIX = /\b(?:case|cover|charger|sleeve|protector)\s*$/i;
 const NON_NEW_TITLE = /\b(?:refurbished|renewed|pre[- ]owned|second[- ]hand|open[- ]box|used)\b/i;
-const MODEL_SUFFIX = /^(?:pro|max|plus|ultra|mini|lite|fe|se|xl|power)\b/;
+const MODEL_SUFFIX = /^(?:pro|max|plus|ultra|mini|lite|fe|se|xl|power|fold|flip)\b/;
+const MACBOOK_SCREEN_SIZE = /\b(macbook (?:air|pro)) (?:13(?: 6)?|14|15|16) (?=m[1-9]\b)/;
 
 function normalizedTitle(title) {
-  return ` ${title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `;
+  const value = title.toLowerCase()
+    .replace(/\+/g, " plus ")
+    .replace(/(\d)plus\b/g, "$1 plus")
+    // Retailers insert the screen size before the chip in MacBook names.
+    // Canonicalize its optional unit without removing the explicit size.
+    .replace(/\b(macbook\s+(?:air|pro))\s+(13(?:\.6)?|14|15|16)(?:\s*-?\s*(?:inch(?:es)?|in\b|["″]))?\s+(?=m[1-9]\b)/gi, "$1 $2 ");
+  return ` ${value.replace(/[^a-z0-9]+/g, " ").trim()} `;
 }
 
 function matchesModel(title, model, brand) {
-  const name = normalizedTitle(title);
+  let name = normalizedTitle(title);
+  // Only ignore this narrowly defined insertion when the requested model
+  // omits a size. A supplied size, chip, suffix or capacity must still match.
+  if (!MACBOOK_SCREEN_SIZE.test(model)) name = name.replace(MACBOOK_SCREEN_SIZE, "$1 ");
   const withoutBrand = brand && model.length > brand.length && model.startsWith(brand) ? ` ${model.slice(brand.length)}` : model;
   const index = name.indexOf(withoutBrand);
   return index >= 0 && !MODEL_SUFFIX.test(name.slice(index + withoutBrand.length));
@@ -62,7 +72,7 @@ export async function searchProducts(query, { budget, modelName, modelBrand, pre
         const title = result._rawTitle ?? result.name;
         if (ACCESSORY_TITLE.test(title) || NON_NEW_TITLE.test(title)) return [];
         if (["smartphone", "laptop"].includes(opts.category) && DEVICE_ACCESSORY_SUFFIX.test(title)) return [];
-        if (model && !matchesModel(result.name, model, brand)) return [];
+        if (model && !matchesModel(title, model, brand)) return [];
         const sellers = indianOffers((result.sellers || []).filter((offer) =>
           offer.price >= (budget?.min ?? 0) &&
           offer.price <= (budget?.max ?? Infinity)

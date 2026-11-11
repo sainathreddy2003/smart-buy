@@ -50,17 +50,24 @@ export const structuredRequirementSchema = z.object({
  * products are worth looking up, not state their price/specs (those always
  * come from a live search afterward — see suggestProductNames in
  * ai.service.js). A hallucinated name just fails to match anything in the
- * live search and gets silently dropped, so this schema only needs to keep
- * the shape sane, not the content honest.
+ * live search and gets dropped. Validation keeps malformed or generic search
+ * terms out; live model matching still has to verify that a model exists.
  */
 export const productSuggestionSchema = z.object({
   products: z
     .array(
       z.object({
-        name: z.string().trim().min(2).max(120),
-        brand: z.string().trim().min(1).max(40).optional(),
+        name: z.string().trim().min(2).max(120)
+          .refine((name) => !/https?:\/\/|\b(?:under|budget|cheap(?:est)?|best|suggest|recommend)\b|₹/i.test(name), "Use a product model, not a search query")
+          .refine((name) => !/^(?:(?:camera|gaming|student|general|everyday|wireless)\s+)*(?:phone|smartphone|laptop|headphones?|smartwatch|tablet|monitor)s?$/i.test(name), "A specific product model is required"),
+        brand: z.string().trim().min(1).max(40),
         cameraFit: z.enum(["strong", "value", "uncertain"]).optional(),
-      })
+      }).refine(({ name, brand }) => {
+        const normalizeName = (value) => value.toLocaleLowerCase("en-IN")
+          .replace(/\+/g, " plus ").replace(/(\d)plus\b/g, "$1 plus")
+          .replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+        return normalizeName(name) !== normalizeName(brand);
+      }, "A brand name alone does not identify a product model")
     )
     .max(8),
 });

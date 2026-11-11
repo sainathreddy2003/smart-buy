@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import Groq from "groq-sdk";
 import { Product } from "../models/Product.js";
@@ -18,6 +18,8 @@ const megaHost = "google-search-master-mega.p.rapidapi.com";
 const googleHost = "google-search-master.p.rapidapi.com";
 const amazonIndia = "https://www.amazon.in/dp/B000000001";
 const flipkartHost = "flipkart-fixture.p.rapidapi.com";
+
+beforeEach(() => clear());
 
 function realTimeListings(url, name, headers = {}) {
   assert.equal(url.hostname, realTimeHost);
@@ -148,7 +150,7 @@ test("a slow primary provider is aborted and an eligible fallback can still win"
   }
 });
 
-test("one shopping search compares matching camera-phone prices without retailer calls", async (t) => {
+test("model searches compare camera-phone prices without separate retailer calls", async (t) => {
   env.useMockData = false;
   env.serpApi.key = "test";
   env.rapidApi.key = "test";
@@ -160,8 +162,8 @@ test("one shopping search compares matching camera-phone prices without retailer
   t.after(() => { env.rapidApi.flipkartSearchConfig = previousConfig; });
   t.mock.method(Groq.Chat.Completions.prototype, "create", async () => ({
     choices: [{ message: { content: JSON.stringify({ products: [
-      { name: "Example Camera Phone Plus", cameraFit: "strong" },
-      { name: "Example Camera Phone", cameraFit: "strong" },
+      { name: "Example Camera Phone Plus", brand: "Example", cameraFit: "strong" },
+      { name: "Example Camera Phone", brand: "Example", cameraFit: "strong" },
     ] }) } }],
   }));
   mockRecommendationPersistence(t);
@@ -181,7 +183,7 @@ test("one shopping search compares matching camera-phone prices without retailer
   const query = "best phone with great camera under 1.50 lakhs";
   const result = await generateRecommendation(parseRequirementDeterministically(query), undefined, query);
   assert.equal(result.preferences.budget.max, 150000);
-  assert.equal(fetch.mock.callCount(), 1);
+  assert.equal(fetch.mock.callCount(), 2);
   assert.deepEqual(result.picks.map(({ product }) => product.name), [name]);
   const offers = result.picks.flatMap(({ product }) => product.sellers);
   assert.deepEqual(offers.map(({ platform, price }) => [platform, price]), [["Flipkart", 121999], ["Amazon India", 122999]]);
@@ -202,9 +204,8 @@ test("best camera phone under ₹2 lakh follows Groq's camera order and skips va
     assert.equal(request.originalQuery, query);
     assert.equal(request.budget.max, 200000);
     assert.equal(request.cameraFocused, true);
-    const availableNames = request.availableProducts.map(({ name }) => name);
-    assert.ok(availableNames.includes(pixelName));
-    assert.ok(availableNames.includes(galaxyName));
+    assert.equal(fetch.mock.callCount(), 0, "Groq runs before either model search");
+    assert.equal(request.availableProducts, undefined);
     return { choices: [{ message: { content: JSON.stringify({ products: [
       { name: "Motorola G57 Power 5G", brand: "Motorola", cameraFit: "value" },
       { name: "Google Pixel 10 Pro", brand: "Google", cameraFit: "strong" },
@@ -212,7 +213,7 @@ test("best camera phone under ₹2 lakh follows Groq's camera order and skips va
     ] }) } }] };
   });
   const fetch = t.mock.method(globalThis, "fetch", async (url) => shoppingListings(url, [
-    { title: galaxyName, price: "₹1,25,000", direct_link: amazonIndia, rating: 5 },
+    { title: galaxyName, price: "₹1,25,000", direct_link: "https://www.amazon.in/dp/B000000002", rating: 5 },
     { title: "Pixel 10 Pro XL 256 GB", price: "₹98,000", direct_link: amazonIndia },
     { title: pixelName, price: "₹99,000", direct_link: amazonIndia },
     { title: "Motorola G57 Power 5G 256 GB", price: "₹25,000", direct_link: amazonIndia },
@@ -221,8 +222,8 @@ test("best camera phone under ₹2 lakh follows Groq's camera order and skips va
   const result = await generateRecommendation(parseRequirementDeterministically(query), undefined, query);
   assert.deepEqual(result.picks.map(({ product }) => product.name), [pixelName, galaxyName]);
   assert.ok(result.picks.every(({ rankingSource, matchScore }) => rankingSource === "groq" && matchScore == null));
-  assert.equal(fetch.mock.callCount(), 1);
-  assert.doesNotMatch(fetch.mock.calls[0].arguments[0].searchParams.get("q"), /Motorola/i);
+  assert.equal(fetch.mock.callCount(), 2);
+  assert.ok(fetch.mock.calls.every(({ arguments: [url] }) => !/Motorola/i.test(url.searchParams.get("q"))));
 });
 
 test("a value-only camera shortlist returns no recommendation instead of a generic top pick", async (t) => {
@@ -231,7 +232,7 @@ test("a value-only camera shortlist returns no recommendation instead of a gener
   env.rapidApi.key = "test";
   clear();
   t.mock.method(Groq.Chat.Completions.prototype, "create", async () => ({
-    choices: [{ message: { content: '{"products":[{"name":"Motorola G57 Power 5G","cameraFit":"value"}]}' } }],
+    choices: [{ message: { content: '{"products":[{"name":"Motorola G57 Power 5G","brand":"Motorola","cameraFit":"value"}]}' } }],
   }));
   const fetch = t.mock.method(globalThis, "fetch", async (url) => shoppingListings(url, [
     { title: "Motorola G57 Power 5G 256 GB", price: "₹25,000", direct_link: amazonIndia },
@@ -241,7 +242,7 @@ test("a value-only camera shortlist returns no recommendation instead of a gener
     statusCode: 404,
     message: /shortlisted camera phone/,
   });
-  assert.equal(fetch.mock.callCount(), 1);
+  assert.equal(fetch.mock.callCount(), 0);
 });
 
 test("laptop recommendations prefer the requested price tier and explain cheaper fallbacks", async (t) => {
@@ -249,7 +250,7 @@ test("laptop recommendations prefer the requested price tier and explain cheaper
   env.serpApi.key = "test";
   env.rapidApi.key = "test";
   t.mock.method(Groq.Chat.Completions.prototype, "create", async () => ({
-    choices: [{ message: { content: '{"products":[]}' } }],
+    choices: [{ message: { content: '{"products":[{"name":"Example Everyday Laptop","brand":"Example"},{"name":"Example Laptop Core Ultra 7","brand":"Example"}]}' } }],
   }));
   mockRecommendationPersistence(t);
 
@@ -257,7 +258,7 @@ test("laptop recommendations prefer the requested price tier and explain cheaper
   const fetch = t.mock.method(globalThis, "fetch", async (url) => shoppingListings(url, [
     { title: "Example Everyday Laptop 512GB SSD, 16GB RAM", price: "₹60,000", link: amazonIndia },
     ...(preferredOfferAvailable ? [
-      { title: "Example Laptop Core Ultra 7, 1TB SSD, 32GB RAM", price: "₹1,55,000", link: amazonIndia },
+      { title: "Example Laptop Core Ultra 7, 1TB SSD, 32GB RAM", price: "₹1,55,000", link: "https://www.amazon.in/dp/B000000002" },
       { title: "Example Laptop Core Ultra 7, 512GB SSD, 16GB RAM", price: "₹98,000", direct_link: "https://www.flipkart.com/item/p/512" },
     ] : []),
   ]));
@@ -269,20 +270,20 @@ test("laptop recommendations prefer the requested price tier and explain cheaper
     ramGB: 32, storageGB: 1024, cpuTier: 4, gpuTier: undefined,
   });
   assert.deepEqual(result.picks[0].product.sellers.map(({ platform }) => platform), ["Amazon India"]);
-  assert.equal(fetch.mock.callCount(), 1);
+  assert.equal(fetch.mock.callCount(), 2);
 
   preferredOfferAvailable = false;
   clear();
   const fallback = await generateRecommendation(preferences, undefined, "Laptop for everyday use. My budget is 200000");
   assert.deepEqual(fallback.picks.map(({ product }) => product.bestPrice), [60000]);
   assert.match(fallback.summary, /₹1,30,000 and ₹2,00,000.*lower-priced alternatives/);
-  assert.equal(fetch.mock.callCount(), 2);
+  assert.equal(fetch.mock.callCount(), 4);
 
   clear();
   const cheapest = await generateRecommendation(preferences, undefined, "Cheapest laptop for everyday use under ₹2 lakh");
   assert.deepEqual(cheapest.picks.map(({ product }) => product.bestPrice), [60000]);
   assert.doesNotMatch(cheapest.summary, /lower-priced alternatives/);
-  assert.equal(fetch.mock.callCount(), 3);
+  assert.equal(fetch.mock.callCount(), 6);
 });
 
 test("a recommendation switches providers after a failure and uses the fallback's prices", async (t) => {
@@ -290,7 +291,7 @@ test("a recommendation switches providers after a failure and uses the fallback'
   env.serpApi.key = "test";
   env.rapidApi.key = "test";
   t.mock.method(Groq.Chat.Completions.prototype, "create", async () => ({
-    choices: [{ message: { content: '{"products":[]}' } }],
+    choices: [{ message: { content: '{"products":[{"name":"Fallback Work Laptop","brand":"Fallback"}]}' } }],
   }));
   mockRecommendationPersistence(t);
   const title = "Fallback Work Laptop, 512GB SSD, 16GB RAM";

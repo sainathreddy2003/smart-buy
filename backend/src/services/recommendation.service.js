@@ -113,6 +113,7 @@ function toVirtualCandidate(result, category) {
     source: result.source,
     sourceProductId: result.sourceProductId,
     shoppingHistoryId: result.shoppingHistoryId,
+    listingTitle: result._rawTitle || result.name,
   };
 }
 
@@ -158,42 +159,45 @@ async function fetchCandidates(requirement, originalQuery, cameraFocused) {
   const preferredMinPrice = ["smartphone", "laptop"].includes(category) && !budget?.min && budget?.max && !prefersValue
     ? Math.ceil(budget.max * PREFERRED_DEVICE_BUDGET_RATIO)
     : undefined;
-  const terms = [...new Set([...(requirement.useCases || []), ...(requirement.keywords || []).slice(0, 4)]
-    .map((term) => term.trim()).filter((term) => term
-      && !/\b(?:under|budget|lakhs?|rupees)\b|₹/i.test(term)
-      && (category !== "smartphone" || cameraFocused || !CAMERA_REQUEST.test(term))))];
-  const minPrice = budget?.min || preferredMinPrice;
-  const budgetQuery = minPrice != null && budget?.max != null
-    ? `₹${minPrice} to ₹${budget.max}`
-    : budget?.max != null ? `under ₹${budget.max}` : minPrice != null ? `from ₹${minPrice}` : "";
-  const queryTerms = cameraFocused ? (preferredMinPrice && budget?.max >= 100000 ? "flagship camera phone" : "camera phone") : terms.join(" ");
-  const query = [queryTerms, budgetQuery].filter(Boolean).join(" ");
-  const listings = await searchProducts(query, {
-    category, budget, retailers: RECOMMENDATION_RETAILERS, limit: 40,
-    signal: AbortSignal.timeout(SHOPPING_SEARCH_TIMEOUT_MS),
-  });
-
-  let candidates = groupCandidates(listings, category);
-  if (cameraFocused && candidates.length) {
-    const preferred = preferredMinPrice == null ? [] : candidates.filter((product) => product.bestPrice >= preferredMinPrice);
-    if (preferred.length) candidates = preferred;
-    const availableProducts = candidates.map(({ name, brand, bestPrice }) => ({ name, brand, price: bestPrice, currency: "INR" }));
-    const suggestions = await suggestProductNames(requirement, { originalQuery, cameraFocused, preferredMinPrice, availableProducts });
-    if (!suggestions) throw new ApiError(503, "The camera-phone shortlist is temporarily unavailable. Please try again shortly.");
-    const matches = new Set();
-    for (const { name, brand, cameraFit } of suggestions) {
-      if (cameraFit !== "strong") continue;
-      const product = candidates.find((candidate) => candidate.name === name)
-        ?? candidates.find((candidate) => matchesShoppingModel(candidate.name, name, brand));
-      if (product) matches.add(product);
-    }
-    candidates = [...matches];
+  // Groq chooses models from the shopper's needs before any shopping calls.
+  // Suggestions are search targets only; every displayed offer must be live.
+  const suggestions = await suggestProductNames(requirement, { originalQuery, cameraFocused, preferredMinPrice });
+  if (!suggestions) {
+    throw new ApiError(503, "The AI product shortlist is temporarily unavailable. Please try again shortly.");
   }
+  const models = suggestions.filter(({ cameraFit }) => !cameraFocused
+    || cameraFit === "strong" || (prefersValue && cameraFit === "value")).slice(0, 3);
+  console.log(`[AI] ${models.length} models shortlisted before live shopping search`);
+  const signal = AbortSignal.timeout(SHOPPING_SEARCH_TIMEOUT_MS);
+  const lookups = await Promise.allSettled(models.map(async ({ name, brand }) => {
+    const listings = await searchProducts(name, {
+      category, budget, modelName: name, modelBrand: brand,
+      retailers: RECOMMENDATION_RETAILERS, limit: 40, signal,
+    });
+    const matching = groupCandidates(listings, category)
+      .filter((product) => matchesShoppingModel(product.listingTitle, name, brand));
+    if (!matching.length) return undefined;
+    const preferred = preferredMinPrice == null ? [] : matching.filter((product) => product.bestPrice >= preferredMinPrice);
+    // Choose one configuration per suggested model. Groq's model order is
+    // preserved by allSettled even when the live searches finish out of order.
+    return rankProducts(preferred.length ? preferred : matching, requirement)[0]?.product;
+  }));
+  if (lookups.length && lookups.every(({ status }) => status === "rejected")) {
+    throw new ApiError(503, "Live prices for the shortlisted products are temporarily unavailable. Please try again later.");
+  }
+  const unique = new Map();
+  for (const lookup of lookups) {
+    if (lookup.status !== "fulfilled" || !lookup.value) continue;
+    const product = lookup.value;
+    const identity = JSON.stringify([product.source, product.sourceProductId || product.sellers[0].url]);
+    if (!unique.has(identity)) unique.set(identity, product);
+  }
+  const candidates = [...unique.values()];
   if (!candidates.length) {
     const budgetMessage = budget?.max != null
       ? ` within your ₹${budget.max.toLocaleString("en-IN")} budget`
       : budget?.min ? ` at or above ₹${budget.min.toLocaleString("en-IN")}` : "";
-    const product = cameraFocused ? "a shortlisted camera phone" : `a ${category}`;
+    const product = cameraFocused ? "a shortlisted camera phone" : `a shortlisted ${category}`;
     throw ApiError.notFound(`I couldn’t find ${product} from Amazon India or Flipkart${budgetMessage} in this search.`);
   }
   return { candidates, preferredMinPrice };
@@ -382,7 +386,7 @@ function generateTradeoff(product, requirement, candidates, rankedScores) {
   if (cheaper >= Math.ceil(candidates.length / 2)) {
     return "Priced higher than most alternatives found for this search.";
   }
-  if (product.rating > 0 && myScore?.breakdown.ratingScore < 80) {
+  if (product.rating > 0 && myScore?.breakdown?.ratingScore < 80) {
     return "Rated slightly lower than the top picks — worth reading a couple of reviews before deciding.";
   }
   const reqs = requirement.requirements || {};
@@ -429,15 +433,13 @@ export async function generateRecommendation(rawBody, userId, originalQuery) {
 
   const preferred = preferredMinPrice == null ? [] : candidates.filter((product) => product.bestPrice >= preferredMinPrice);
   const lowerPriceFallback = preferredMinPrice != null && !preferred.length;
-  const ranked = cameraFocused ? candidates.map((product) => ({ product })) : rankProducts(preferred.length ? preferred : candidates, requirement);
+  const ranked = (preferred.length ? preferred : candidates).map((product) => ({ product }));
   const top = ranked.slice(0, 3);
 
-  console.log(cameraFocused
-    ? `[RECOMMENDER] ${top.length} Groq camera picks with live shopping prices`
-    : `[RECOMMENDER] Top score: ${top[0].final}`);
+  console.log(`[RECOMMENDER] ${top.length} Groq picks with verified live shopping prices`);
 
   const explanations = top.map((entry) => ({
-    reasoning: [cameraFocused ? "Shortlisted by Groq for your camera needs" : null, ...generateExplanation(entry.product, requirement)].filter(Boolean).join(" • "),
+    reasoning: [cameraFocused ? "Shortlisted by Groq for your camera needs" : "Shortlisted by Groq for your stated needs", ...generateExplanation(entry.product, requirement)].join(" • "),
     tradeoffs: cameraFocused ? "Check independent camera reviews before deciding." : generateTradeoff(entry.product, requirement, candidates, top),
   }));
 
@@ -449,7 +451,7 @@ export async function generateRecommendation(rawBody, userId, originalQuery) {
     product: entry.product._id,
     offers: entry.product.sellers,
     rank: index + 1,
-    ...(cameraFocused ? { rankingSource: "groq" } : { matchScore: entry.final }),
+    rankingSource: "groq",
     reasoning: explanations[index].reasoning,
     tradeoffs: explanations[index].tradeoffs,
   }));
@@ -463,7 +465,7 @@ export async function generateRecommendation(rawBody, userId, originalQuery) {
       ? `I couldn’t find a live offer between ₹${preferredMinPrice.toLocaleString("en-IN")} and ₹${requirement.budget.max.toLocaleString("en-IN")} in this search. Here are lower-priced ${cameraFocused ? "camera alternatives" : "alternatives"} within your budget.`
       : cameraFocused
       ? "Groq shortlisted these camera phones. Prices are from live shopping listings."
-      : `Ranked live listings for ${requirement.useCases?.join(", ") || "your stated needs"}${requirement.budget?.max != null ? ` within ₹${requirement.budget.max.toLocaleString("en-IN")}` : ""}.`,
+      : `Groq shortlisted these products for ${requirement.useCases?.join(", ") || "your stated needs"}. Prices are from live shopping listings${requirement.budget?.max != null ? ` within ₹${requirement.budget.max.toLocaleString("en-IN")}` : ""}.`,
   });
 
   await recommendation.populate("picks.product");

@@ -9,45 +9,45 @@ deliver that. Spec sheets don't translate intent into a decision.
 
 ## Solution
 
-SmartBuy AI converts a natural-language shopping requirement into structured
-technical criteria, then ranks real products against that criteria using a
-transparent, deterministic scoring model — not a black box, and not an LLM
-guessing at prices. You get ranked picks, an explanation grounded in the
-product's actual specs, multi-seller price comparison, price history, and
-review videos, in one flow.
+SmartBuy AI extracts category, budget and intended use from a shopping request,
+then asks Groq to shortlist suitable product models. It searches those models
+individually and shows only matching listings with verified
+Indian retailer offers inside the budget. Groq chooses the models; shopping
+providers supply the prices and seller links. Product pages add price history
+and review videos on demand.
 
 ```
 "Laptop for video editing under ₹80,000"
         ↓
 Category: laptop · Budget: ≤₹80,000 · Use case: video editing
         ↓
-Priorities: CPU 30% · GPU 25% · RAM 20% · Storage 10% · Display 10% · ...
+Groq shortlists up to three suitable laptop models
         ↓
-ASUS TUF Gaming A15 — 88% match — ₹78,499 (Flipkart, best of 3 sellers)
-"Dedicated GPU (RTX 4050) accelerates video editing workloads.
- ₹78,499 fits within your ₹80,000 budget. Well suited for video editing."
+Up to three exact-model searches fetch live offers
+        ↓
+Exact model matches + Amazon India / Flipkart + INR + price ≤₹80,000
+        ↓
+Available picks in Groq's order, with the returned live seller prices
 ```
 
 ## Features
 
 - **A real chat interface, not a form** — `/chat` is the primary experience:
   type what you're trying to do, get ranked picks inline in the thread, and
-  keep refining ("show me something cheaper," "what about gaming instead")
-  as follow-up turns in the same conversation. The AI (or, with no AI key
-  configured, a deterministic regex/keyword parser) turns each turn into
-  structured criteria.
-- **Intent-aware recommendation engine** — a gaming request weights GPU/CPU
-  heavily; a coding/student request weights RAM/CPU/battery and *not* GPU; a
-  travel-headphone request weights battery/portability over raw specs. The
-  weighting is dynamic per-request, not a fixed formula.
-- **Deterministic scoring, not AI guessing** — `specScore × 0.40 + intentMatchScore × 0.30 + valueScore × 0.15 + ratingScore × 0.10 + priceScore × 0.05`.
-  The AI's only job is turning your sentence into structured requirements +
-  priority weights; a plain arithmetic engine does the ranking.
+  ask follow-up questions about that shortlist in the same conversation.
+  New Session or a category selection starts another product search.
+- **Groq-first model selection** — extracted needs such as camera quality,
+  gaming, portability and budget guide a shortlist of up to three models for
+  every supported category. Only live listings matching those models can
+  become recommendations.
+- **Prices come from shopping results** — recommendations use returned INR
+  offers within the user's budget. Groq does not supply the displayed price.
 - **Grounded, explainable recommendations** — every "why we recommend this"
   bullet is generated from a template comparing real product fields against
   your stated requirements. Nothing is AI-hallucinated.
-- **Multi-seller price comparison** — products carry real seller arrays
-  (Amazon/Flipkart/Croma/...); best price is always surfaced and highlighted.
+- **Multi-seller price comparison** — recommendations display Amazon India
+  and Flipkart offers when the same search response includes both for the
+  same configuration. A missing seller price is left unverified.
 - **Price history** — recorded lows, highs, and changes in the last 30 days.
   The chart shows a trend once there are at least two recorded prices.
 - **YouTube review discovery** — "Watch before you buy," pulling real review
@@ -64,10 +64,10 @@ ASUS TUF Gaming A15 — 88% match — ₹78,499 (Flipkart, best of 3 sellers)
 - **Auth** — JWT access + httpOnly refresh cookie, bcrypt password hashing.
 - **Caching** — in-memory TTL cache in front of product search and YouTube
   calls, to avoid redundant external requests.
-- **Live recommendations within budget.** The recommender checks live shopping
-  providers and ranks only listings with eligible INR offers. It reports when
-  no live listings meet the requested range. The seeded catalog supports
-  browsing separately.
+- **Live recommendations within budget.** The recommender accepts only
+  shortlisted models with eligible INR offers. It reports when the search
+  returns no matching offer within the requested range. The seeded catalog
+  supports browsing separately.
 
 ## Architecture
 
@@ -79,18 +79,19 @@ graph TD
     AI -->|Groq LLM, JSON validated| Struct[Structured Requirement]
     AI -.->|no key / invalid JSON| Det[Deterministic Parser Fallback]
     Det --> Struct
-    Struct --> REC[Recommendation Engine]
+    Struct --> Shortlist[Groq shortlists up to three suitable models]
+    Shortlist --> REC[Recommendation Engine]
     REC --> PROV[Product Provider Orchestrator]
-    PROV --> Chain[One search through SerpApi or the next available provider]
-    Chain --> Budget[Filter Amazon India and Flipkart offers by budget]
+    PROV --> Chain[Up to three parallel exact-model searches through the provider chain]
+    Chain --> Budget[Filter exact models and eligible Indian offers by budget]
     Budget --> Quotes[Group prices for the same configuration]
-    Quotes --> Score[Rank matching listings and explain]
+    Quotes --> Score[Choose one configuration per model in Groq order]
     Score --> Persist[Save up to three picks with their qualifying offers]
-    Score --> Price[Price Comparison + History]
-    Score --> YT[YouTube138 Review Search]
-    Price --> Results[Results / Product Detail UI]
-    YT --> Results
+    Persist --> Results[Chat shortlist UI]
     Results --> User
+    Results -.->|open product| Detail[Product Detail UI]
+    Detail --> Price[On-demand Price History]
+    Detail --> YT[On-demand Review Video Search]
 ```
 
 ### Backend layout
@@ -103,9 +104,9 @@ backend/src/
   controllers/  request handlers — thin, call services
   services/
     ai.service.js               Groq client + analyzeRequirement() + suggestProductNames()
-    recommendation.service.js   deterministic scoring/ranking/explanation engine
+    recommendation.service.js   Groq-first selection, live verification, explanations
     productSearch.service.js    live shopping providers and budget filtering
-    providers/                  SerpApi and RapidAPI discovery, Amazon India and Flipkart quotes
+    providers/                  SerpApi and RapidAPI discovery; retailer adapters are not called during recommendations
     price.service.js            price comparison + history
     youtube.service.js          YouTube138 review search + fallback
     cache.service.js            in-memory TTL cache
@@ -136,54 +137,44 @@ frontend/src/
 
 **1. Requirement extraction (AI, with a deterministic fallback).** Free text
 goes to Groq with a system prompt that explicitly forbids inventing product
-facts — its only job is inferring category, budget, use cases, hard
+facts. This first step infers category, budget, use cases, hard
 requirements (e.g. "GPU required," "16GB+ RAM"), and **priority weights**
 across seven dimensions (cpu/gpu/ram/storage/display/battery/portability).
 The response is Zod-validated; on failure it retries once, then falls back to
 `utils/deterministicParser.js` — a regex/keyword engine with hand-tuned
 priority presets for gaming, video editing, coding/student, photography,
-battery-life, ANC/travel, and gym use cases. This fallback is not a degraded
-experience — it's the same code path a guided-wizard search normalizes into.
+battery-life, ANC/travel, and gym use cases. The guided wizard normalizes into
+the same structured requirement. The parser can work without Groq, but live
+recommendations still need Groq for the next step.
 
-**2. Candidate retrieval.** The engine searches live providers for suggested
-model names first. If no offers qualify, it tries a keyword search. Each offer
-must be in INR and within the requested price range before the engine ranks it.
-Only the final picks and their eligible offers are stored for later review.
+**2. Model shortlist.** Before making a shopping request, the engine sends
+the structured needs, original query and budget to Groq. It requests up to
+three distinct suitable models for any supported category. These are model
+suggestions, not verified availability or price quotes. If shortlisting fails,
+the app reports that failure instead of substituting unrelated products.
 
-**3. Normalization.** Each product's human-readable specs (`"16GB DDR5"`,
-`"0.5TB"`, `"RTX 4050 6GB"`) are pre-normalized at seed/ingestion time via
-`utils/normalization.js` into numeric fields (`ramGB`, `storageGB`, `cpuTier`
-0–5, `gpuTier` 0–5, `displayScore`, `batteryHours`, `portabilityScore`) — the
-scoring engine never parses strings at request time.
+**3. Exact-model live searches.** The engine searches each shortlisted model
+individually, with up to three lookups running in parallel. Discovery starts
+with SerpApi Google Shopping for India. On provider failure or quota exhaustion, it tries
+Real-Time Product Search, Google Search Master MEGA, then standard Google
+Search Master. Those retries can consume additional calls. Repeated queries
+can use the five-minute cache.
 
-**4. Scoring.**
+**4. Verification and selection.** Returned listings must match a shortlisted
+model and have an eligible Amazon India or Flipkart offer in INR inside the
+user's stated budget. Refurbished items, common accessories and different
+model suffixes are excluded. The engine chooses one available configuration
+per matched model and preserves Groq's model order. If some lookups fail or
+return no eligible offer, fewer than three recommendations can be returned.
+It does not run separate retailer price requests to fill gaps.
 
-```
-final = specScore × 0.40
-      + intentMatchScore × 0.30
-      + valueScore × 0.15
-      + ratingScore × 0.10
-      + priceScore × 0.05
-```
-
-- `specScore` — each normalized dimension (0–1, relative to the candidate
-  set's max) weighted by the priorities from step 1. This is where "dynamic
-  weighting based on intent" actually happens — GPU counts for ~0 in a
-  student-laptop request and ~30% in a gaming request.
-- `intentMatchScore` — fraction of stated use cases the product's tagged use
-  cases satisfy, plus pass/fail checks against hard requirements (RAM
-  minimum, GPU required, ANC required, etc).
-- `valueScore` — spec score per rupee, relative to the candidate set.
-- `ratingScore` — normalized product rating.
-- `priceScore` — 0 if over budget; otherwise rewards being close to (without
-  exceeding) the stated budget.
-
-**5. Explanation.** `generateExplanation()` builds bullet points from
-template strings referencing the actual comparison (`"${ramGB}GB RAM meets
-your ${minimum}GB+ requirement"`), never from free-form AI text — this is
-literally what makes the recommendations auditable rather than hallucinated.
-A separate `generateTradeoff()` picks one honest downside (priced above most
-alternatives, rated lower, GPU present but modest, etc).
+**5. Persistence and explanation.** Only the selected products and their
+qualifying live offers are saved. Listing text supplies any identifiable
+RAM, storage and CPU/GPU fields; absent specifications stay unknown.
+`generateExplanation()` references verified listing fields and the stated
+budget. Groq selection is identified as such rather than shown as a numeric
+match percentage. Price-history and video lookups run on demand on product
+pages, separately from recommendation discovery.
 
 ## Setup
 
@@ -202,7 +193,7 @@ npm start
 
 Start Docker Desktop or Docker Engine with Compose. If `backend/.env` is
 missing, copy `backend/.env.example` and set both JWT secrets. For live shopping,
-set `USE_MOCK_DATA=false` and add your shopping API keys.
+set `USE_MOCK_DATA=false` and add `GROQ_API_KEY` plus your shopping API keys.
 
 ```bash
 docker compose up --build -d --wait
@@ -251,23 +242,27 @@ npm run dev               # http://localhost:5173
 |---|---|---|
 | `MONGO_URI` | **Yes** | Database connection |
 | `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` | **Yes** | Any long random strings |
-| `GROQ_API_KEY` | No | AI requirement parsing + follow-up chat. Falls back to a deterministic parser; chat is disabled without it. |
+| `GROQ_API_KEY` | For live recommendations | Model shortlisting, AI requirement parsing and follow-up chat. Requirement extraction can fall back to the deterministic parser; shortlisting and chat require the key. |
 | `SERPAPI_KEY` | No | Primary discovery through SerpApi's Google Shopping engine. |
 | `RAPIDAPI_KEY` | No | Real-Time Product Search, price history, both Google Search Master fallbacks, and optional YouTube review search. |
 | `USE_MOCK_DATA` | No (default `true`) | Set `false` to enable live recommendations. |
 | `YOUTUBE_API_KEY` | No | Alternative to RapidAPI for review search, if you have an official Google YouTube Data API v3 key. |
 
-Live recommendations require `USE_MOCK_DATA=false` and at least one of `SERPAPI_KEY` or `RAPIDAPI_KEY`.
+Live recommendations require `USE_MOCK_DATA=false`, `GROQ_API_KEY`, and at least one of `SERPAPI_KEY` or `RAPIDAPI_KEY`.
 Discovery starts with SerpApi Google Shopping for India. If a provider is
 unavailable or over quota, the order is Real-Time Product Search, Google
 Search Master MEGA, then standard Google Search Master. A successful empty
 result stays with the responding provider.
 
-Each recommendation uses the prices and seller links in a single shopping
-response. SmartBuy shows Amazon India and Flipkart prices when the response
-includes both for the same configuration and within budget. If a seller's offer
-is missing, its price stays blank. Opening a product page loads the chart on
-demand from saved observations and matching Real-Time Product Search history.
+Groq first proposes up to three suitable models. Each model gets one shopping
+search, with no separate retailer quote calls. SmartBuy shows Amazon India
+and Flipkart prices when that model's response includes both for the same
+configuration and within budget. If a seller's offer is missing, its price
+stays unverified. A fresh recommendation can therefore use up to three
+shopping calls when each primary-provider lookup succeeds; provider failures
+can add fallback calls, and repeated queries can use the five-minute cache.
+Opening a product page loads the chart on demand from saved observations and
+matching Real-Time Product Search history.
 
 For RapidAPI shopping, the app reads the reported request allowance and stops
 issuing new calls to a provider when its balance reaches zero. The balance is
@@ -283,10 +278,11 @@ cd backend
 npm test
 ```
 
-Covers requirement parsing (budget/category/priority extraction), spec
-normalization (`"16 GB RAM"` → `16`, `"0.5TB"` → `512`), scoring (a matching
-product outranks a non-matching one; over-budget products never win on
-price), and duplicate/seller-merge detection.
+Covers requirement parsing (budget/category/priority extraction), Groq-first
+recommendation flow, model identity and budget filtering, provider fallback,
+spec normalization (`"16 GB RAM"` → `16`, `"0.5TB"` → `512`), and
+duplicate/seller-merge detection. Provider and Groq responses are mocked in
+the tests, so running the suite does not use external API quota.
 
 ## Deploy to Render
 
@@ -297,7 +293,7 @@ on the same domain. Render generates the session secrets and checks `/api/health
 Set `MONGO_URI` in Render to a hosted MongoDB database. If it uses an IP access
 list, allow the service's [outbound IP ranges](https://render.com/docs/outbound-ip-addresses).
 Set `RAPIDAPI_KEY` and/or `SERPAPI_KEY` for live shopping results, and add
-`GROQ_API_KEY` for AI-assisted request parsing and chat. Enter credentials
+`GROQ_API_KEY` for model shortlisting, AI-assisted request parsing and chat. Enter credentials
 in Render's environment settings.
 
 The service starts with live search enabled and skips database seeding. If
@@ -335,57 +331,54 @@ temporary provider errors separately.
 
 ## Demoing this in an interview
 
-1. **Show the zero-key path first.** Stop the backend, unset `GROQ_API_KEY` in
-   `.env`, restart — the app still fully works via the deterministic parser.
-   This is the single strongest "I thought about reliability" moment.
+1. **Explain the two AI steps.** Requirement extraction reads category,
+   budget and intended use; Groq then shortlists suitable model names before
+   any shopping lookup. The extraction step has a deterministic fallback,
+   while recommendations require the model-shortlisting step to succeed.
 2. **Type the spec's own worked example**: *"I am a CSE student. I need a
    laptop mainly for coding, occasional gaming and college work. My budget is
-   70k."* — narrate that the priority weights it returns favor RAM/CPU/battery
-   over GPU, and explain why (unlike a naive "highest spec wins" system).
+   70k."* — inspect the extracted needs, Groq's model shortlist, then the
+   verified live offers. Explain that a suggested model is shown only when
+   an eligible listing matches it inside the budget.
 3. **Open a product detail page** and walk through price comparison → price
    history → the real YouTube reviews it pulled — three genuinely different
    external data sources in one page, with graceful fallbacks for each if you
    toggle the relevant key off.
 4. **Compare 2–3 products** and point at the "best choice" verdict — it's
    computed by counting won spec rows, not another AI call.
-5. **Open `backend/src/services/recommendation.service.js`** if asked "so
-   where's the AI actually used" — the honest answer is "one call, for NLU
-   only," and being able to point at exactly that line is the point.
+5. **Open `backend/src/services/recommendation.service.js`** to show the order
+   of operations: Groq model shortlist, exact-model shopping searches,
+   budget and seller validation, then persistence. Displayed prices come
+   from the shopping responses, not the model's estimates.
 
 ## Known limitations
 
-- **Named-product search costs more live-provider quota per recommendation
-  than a single keyword search.** Asking the AI for 4-6 real product names
-  and searching each one individually means up to ~5 live searches for one
-  `/api/recommendations` call, instead of 1. Each name-search is cached (like
-  every other live query), so repeating the same product name within the TTL
-  window is free, but a fresh request can burn through SerpApi's monthly
-  budget faster than the single-search architecture did. Fine for a resume
-  demo's actual usage volume; would need batching or a larger paid tier
-  before any real traffic.
+- **Model coverage uses provider quota.** A fresh recommendation can make up
+  to three exact-model shopping searches. Provider fallback attempts can
+  add calls. The five-minute search cache reduces repeated requests, and
+  recommendations make no additional retailer quote or history calls.
+- **A shortlist is not a live inventory check.** Groq may suggest a model
+  that is unavailable or outside the budget at current prices. Only matching
+  eligible offers are displayed; missing models are omitted rather than
+  replaced with unrelated results.
 - **Live offers can change.** The search cache lasts up to five minutes.
   Saved recommendations show the eligible offers captured when the search ran.
 - **Live-ingested products have thinner specs than seeded ones.** The
   product-search API returns a listing title, price, seller, and photo —
   not a structured spec sheet. `ramGB`/`storageGB` get parsed from the title
   when it happens to mention them ("...8GB RAM, 256GB Storage"); CPU/GPU
-  tier, display, battery, and portability are left unset for live products,
-  which the scoring engine treats as neutral rather than crashing on, but it
-  does mean a live-ingested product is scored on less information than a
-  hand-curated seeded one.
+  tier can be extracted when identifiable in the title; absent display,
+  battery and portability facts stay unset. Review the retailer's full
+  specifications before buying.
 - **Cross-platform spec comparison is crude.** Normalized fields like `ramGB`
   are compared as raw numbers across iOS and Android, even though the same
   RAM figure doesn't mean the same real-world performance on both platforms
   (an 8GB Android phone isn't straightforwardly "better" than a 6GB iPhone).
-  This is a genuinely hard problem for any numeric-spec-based engine and
-  isn't fully solved here — `valueScore` was reworked to be budget-relative
-  (see `recommendation.service.js`) specifically to reduce this effect, but
-  it doesn't eliminate it.
-- **Demo catalog, not live retail data.** 28 seeded products across 6
-  categories with real-shaped multi-seller pricing; `USE_MOCK_DATA=false` +
-  `RAPIDAPI_KEY` switches to live search, but this wasn't load-tested against
-  the live API's actual field names beyond the request/response shape I could
-  verify directly.
+  The comparison table cannot establish real-world performance from those
+  numbers alone.
+- **The seeded catalog is demo data.** Seeded products across six categories
+  have illustrative seller offers. Live recommendations require the Groq
+  and shopping credentials described above and do not use those demo prices.
 - **Live prices are recorded when a listing is saved as a recommendation.**
   Listings can start with a single price and build history as they are picked
   again. Seeded products use a separate, labeled demo series.
@@ -397,10 +390,7 @@ temporary provider errors separately.
   scoring, duplicate detection) has unit tests; the frontend was verified
   through manual/browser-driven testing during development, not an automated
   suite.
-- **Categories: keyboards and mice aren't included** — the six implemented
-  categories (smartphone, laptop, headphones, smartwatch, tablet, monitor)
-  cover the recommendation-engine dimensions meaningfully; keyboards/mice
-  would mostly pad the category count without exercising anything new in the
-  scoring model.
+- **Six supported categories** — smartphone, laptop, headphones, smartwatch,
+  tablet and monitor. Keyboards and mice are not currently included.
 - **No dedicated `/docs` tree** — architecture, schema, and algorithm
   explanations live in this README rather than separate files.

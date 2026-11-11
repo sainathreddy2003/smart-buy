@@ -349,7 +349,7 @@ function ChatMessage({ msg }) {
               </div>
             )}
 
-            <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] gap-4 pb-4 pt-1">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,18rem),1fr))] gap-4 pb-4 pt-1">
               {msg.picks.map((pick) => (
                 <ChatProductCard key={pick.product._id} pick={pick} />
               ))}

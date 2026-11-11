@@ -176,6 +176,86 @@ test("an explicit camera request still uses the camera shortlist when AI omits t
   assert.equal(result.picks[0].rankingSource, "groq");
 });
 
+test("a ₹1 lakh camera search shortlists available phones in its preferred tier before cheaper models", async (t) => {
+  const premiumName = "Example Camera Pro 256GB";
+  const fetch = liveSearchFixture(t, [
+    { title: "Samsung Galaxy A56 5G 256GB", price: "₹38,990", direct_link: "https://www.amazon.in/dp/B000000001" },
+    { title: premiumName, price: "₹74,999", direct_link: "https://www.amazon.in/dp/B000000002" },
+    { title: "Example Over Budget Camera Phone", price: "₹1,00,001", direct_link: "https://www.flipkart.com/item/p/over" },
+  ]);
+  mockPersistence(t);
+  const groq = t.mock.method(Groq.Chat.Completions.prototype, "create", async ({ messages }) => {
+    const request = JSON.parse(messages.at(-1).content);
+    assert.equal(request.preferredMinPrice, 65000);
+    assert.deepEqual(request.availableProducts, [
+      { name: premiumName, brand: "Example", price: 74999, currency: "INR" },
+    ]);
+    return { choices: [{ message: { content: JSON.stringify({ products: [
+      { name: premiumName, cameraFit: "strong" },
+    ] }) } }] };
+  });
+  const query = "best phone with great camera under 1 lakh";
+  const result = await generateRecommendation(parseRequirementDeterministically(query), undefined, query);
+
+  assert.equal(result.preferences.budget.max, 100000);
+  assert.deepEqual(result.picks.map(({ product }) => product.bestPrice), [74999]);
+  assert.doesNotMatch(result.summary, /lower-priced/);
+  assert.match(fetch.mock.calls[0].arguments[0].searchParams.get("q"), /65000.*100000/);
+  assert.equal(fetch.mock.callCount(), 1);
+  assert.equal(groq.mock.callCount(), 1);
+});
+
+test("a ₹1 lakh camera search identifies its only ₹38,990 result as a cheaper alternative", async (t) => {
+  const name = "Samsung Galaxy A56 5G 256GB";
+  const fetch = liveSearchFixture(t, [
+    { title: name, price: "₹38,990", direct_link: "https://www.amazon.in/dp/B000000001" },
+  ]);
+  mockPersistence(t);
+  t.mock.method(Groq.Chat.Completions.prototype, "create", async ({ messages }) => {
+    const request = JSON.parse(messages.at(-1).content);
+    assert.deepEqual(request.availableProducts, [
+      { name, brand: "Samsung", price: 38990, currency: "INR" },
+    ]);
+    return { choices: [{ message: { content: JSON.stringify({ products: [
+      { name, cameraFit: "strong" },
+    ] }) } }] };
+  });
+  const query = "best phone with great camera under 1 lakh";
+  const result = await generateRecommendation(parseRequirementDeterministically(query), undefined, query);
+
+  assert.equal(result.preferences.budget.max, 100000);
+  assert.deepEqual(result.picks.map(({ product }) => product.bestPrice), [38990]);
+  assert.match(result.summary, /₹65,000 and ₹1,00,000.*lower-priced camera alternatives/);
+  assert.doesNotMatch(result.summary, /^Groq shortlisted/);
+  assert.equal(fetch.mock.callCount(), 1);
+});
+
+for (const query of ["cheapest camera phone under 1 lakh", "camera phone between 30000 and 100000"]) {
+  test(`camera price-tier preference preserves explicit intent for ${query}`, async (t) => {
+    const cheapName = "Example Camera Phone 128GB";
+    const premiumName = "Example Camera Pro 256GB";
+    const fetch = liveSearchFixture(t, [
+      { title: cheapName, price: "₹38,990", direct_link: "https://www.amazon.in/dp/B000000001" },
+      { title: premiumName, price: "₹74,999", direct_link: "https://www.amazon.in/dp/B000000002" },
+    ]);
+    mockPersistence(t);
+    t.mock.method(Groq.Chat.Completions.prototype, "create", async ({ messages }) => {
+      const request = JSON.parse(messages.at(-1).content);
+      assert.equal(request.preferredMinPrice, undefined);
+      assert.deepEqual(request.availableProducts.map(({ price }) => price), [38990, 74999]);
+      return { choices: [{ message: { content: JSON.stringify({ products: [
+        { name: cheapName, cameraFit: "strong" },
+        { name: premiumName, cameraFit: "strong" },
+      ] }) } }] };
+    });
+    const result = await generateRecommendation(parseRequirementDeterministically(query), undefined, query);
+
+    assert.deepEqual(result.picks.map(({ product }) => product.bestPrice), [38990, 74999]);
+    assert.doesNotMatch(result.summary, /lower-priced/);
+    assert.equal(fetch.mock.callCount(), 1);
+  });
+}
+
 test("the guided photography choice still uses the camera shortlist without a free-text query", async (t) => {
   liveSearchFixture(t);
   mockPersistence(t);

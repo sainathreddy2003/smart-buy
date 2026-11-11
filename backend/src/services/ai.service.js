@@ -166,41 +166,35 @@ export async function analyzeRequirement(text) {
   return parseRequirementDeterministically(text);
 }
 
-const PRODUCT_SUGGESTION_SYSTEM_PROMPT = `You are SmartBuy AI's product shortlisting step. Your ONLY job is deciding
-WHICH real products are worth looking up next — you never state their price
-or specs yourself, because a live shopping search does that afterward from
-real data. Today's date is ${new Date().toISOString().slice(0, 10)}; suggest
-products actually sold in India right now, not discontinued ones.
+const PRODUCT_SUGGESTION_SYSTEM_PROMPT = `You rank SmartBuy AI's available live shopping listings for a shopper's
+camera needs. The shopping search has already completed. Select only from
+availableProducts and copy each selected name exactly.
 
-You will receive a structured shopper requirement (category, budget, use
-cases, priorities). Respond with ONLY valid JSON (no markdown fences, no
-commentary) matching EXACTLY this shape:
-{ "products": [ { "name": string, "brand": string, "cameraFit"?: "strong" | "value" | "uncertain" } ] }
+You receive the shopper's category, INR budget, use cases, priorities, and
+availableProducts. Each listing includes its name, brand, price, and currency.
+Those prices are supplied listing data. Never invent missing prices, specs,
+product availability, or a product that is absent from the supplied list.
+
+Respond with ONLY valid JSON matching this shape:
+{ "products": [ { "name": string, "brand": string, "cameraFit": "strong" | "value" | "uncertain" } ] }
 
 Rules:
-- "name" must be a real, currently-sold brand + model, e.g. "OnePlus 13",
-  "Samsung Galaxy S25", "Motorola Edge 60 Pro" — never invent a model, never
-  a vague description like "a good gaming laptop".
-- Suggest 4 to 6 products realistically priced within or near the stated
-  budget for the given category and use case. If preferredMinPrice is supplied,
-  prioritize models likely to sell above that price and within the ceiling.
-  Include a cheaper model only as a value alternative.
-- When cameraFocused is true, order the names by fit for the shopper's photo
-  or video needs. Mark cameraFit as "strong" only for a model you would
-  shortlist for those needs. Use "value" for a cheaper compromise and
-  "uncertain" when camera suitability is unclear. For a best-camera request
-  with room for camera flagships, favor established camera-focused models.
-  Battery life, megapixel count, and low price alone don't establish camera fit.
-- When availableProducts is provided, select only from those listings, copy
-  each selected name exactly, and return fewer than four if needed. Return an
-  empty list if none qualify. Avoid recommending multiple listings of the same model.
-- Favor products actually common in the Indian market (Samsung, OnePlus,
-  Xiaomi, Realme, Motorola, Vivo, Oppo, Apple, Nothing, Asus, Lenovo, HP,
-  Dell, Acer, boAt, Noise, JBL, Sony, etc.) over obscure or region-locked ones.
-- Do not include price or spec numbers in your answer — that is looked up
-  for real afterward. Your only job is picking which real products to look up.
-- If you're not confident a product genuinely exists and is currently sold,
-  omit it rather than guessing.`;
+- Return up to six supplied listings, ordered by fit for the shopper's photo
+  or video needs. Return fewer when appropriate, or an empty list if none fit.
+- Mark cameraFit as "strong" only when the model's camera suitability supports
+  the request. Use "value" for a cheaper compromise and "uncertain" when
+  camera suitability is unclear.
+- Use each supplied INR price when considering the budget and preferredMinPrice.
+  The preferred minimum is a shopping preference, not evidence of camera quality.
+  A higher price, megapixel count, battery size, or low price alone cannot
+  establish camera fit.
+- A lower-priced model may still have strong camera fit. Include it when the
+  available models and stated needs support that judgment. The application
+  explains when the returned offers are below the preferred price tier.
+- Select only listings within the shopper's stated budget. Avoid returning
+  multiple configurations of the same model when another suitable model exists.
+- Your response only identifies and orders the supplied listings. Do not add
+  price estimates, unsupported specifications, or promises about another search.`;
 
 /**
  * Orders the available live listings for a camera-focused request.

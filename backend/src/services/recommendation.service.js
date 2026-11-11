@@ -155,19 +155,18 @@ async function fetchCandidates(requirement, originalQuery, cameraFocused) {
   }
 
   const prefersValue = LOW_COST_REQUEST.test(originalQuery || "");
-  const preferredMinPrice = ["smartphone", "laptop"].includes(category) && !cameraFocused && !budget?.min && budget?.max && !prefersValue
+  const preferredMinPrice = ["smartphone", "laptop"].includes(category) && !budget?.min && budget?.max && !prefersValue
     ? Math.ceil(budget.max * PREFERRED_DEVICE_BUDGET_RATIO)
     : undefined;
   const terms = [...new Set([...(requirement.useCases || []), ...(requirement.keywords || []).slice(0, 4)]
     .map((term) => term.trim()).filter((term) => term
       && !/\b(?:under|budget|lakhs?|rupees)\b|₹/i.test(term)
       && (category !== "smartphone" || cameraFocused || !CAMERA_REQUEST.test(term))))];
-  const cameraMinPrice = cameraFocused && !prefersValue && budget?.max >= 100000 ? Math.ceil(budget.max * 0.35) : undefined;
-  const minPrice = budget?.min || preferredMinPrice || cameraMinPrice;
+  const minPrice = budget?.min || preferredMinPrice;
   const budgetQuery = minPrice != null && budget?.max != null
     ? `₹${minPrice} to ₹${budget.max}`
     : budget?.max != null ? `under ₹${budget.max}` : minPrice != null ? `from ₹${minPrice}` : "";
-  const queryTerms = cameraFocused ? (cameraMinPrice ? "flagship camera phone" : "camera phone") : terms.join(" ");
+  const queryTerms = cameraFocused ? (preferredMinPrice && budget?.max >= 100000 ? "flagship camera phone" : "camera phone") : terms.join(" ");
   const query = [queryTerms, budgetQuery].filter(Boolean).join(" ");
   const listings = await searchProducts(query, {
     category, budget, retailers: RECOMMENDATION_RETAILERS, limit: 40,
@@ -176,8 +175,10 @@ async function fetchCandidates(requirement, originalQuery, cameraFocused) {
 
   let candidates = groupCandidates(listings, category);
   if (cameraFocused && candidates.length) {
-    const availableProducts = candidates.map(({ name, brand }) => ({ name, brand }));
-    const suggestions = await suggestProductNames(requirement, { originalQuery, cameraFocused, availableProducts });
+    const preferred = preferredMinPrice == null ? [] : candidates.filter((product) => product.bestPrice >= preferredMinPrice);
+    if (preferred.length) candidates = preferred;
+    const availableProducts = candidates.map(({ name, brand, bestPrice }) => ({ name, brand, price: bestPrice, currency: "INR" }));
+    const suggestions = await suggestProductNames(requirement, { originalQuery, cameraFocused, preferredMinPrice, availableProducts });
     if (!suggestions) throw new ApiError(503, "The camera-phone shortlist is temporarily unavailable. Please try again shortly.");
     const matches = new Set();
     for (const { name, brand, cameraFit } of suggestions) {
@@ -458,10 +459,10 @@ export async function generateRecommendation(rawBody, userId, originalQuery) {
     preferences: requirement,
     originalQuery: originalQuery || undefined,
     picks,
-    summary: cameraFocused
+    summary: lowerPriceFallback
+      ? `I couldn’t find a live offer between ₹${preferredMinPrice.toLocaleString("en-IN")} and ₹${requirement.budget.max.toLocaleString("en-IN")} in this search. Here are lower-priced ${cameraFocused ? "camera alternatives" : "alternatives"} within your budget.`
+      : cameraFocused
       ? "Groq shortlisted these camera phones. Prices are from live shopping listings."
-      : lowerPriceFallback
-      ? `I couldn’t verify a live offer between ₹${preferredMinPrice.toLocaleString("en-IN")} and ₹${requirement.budget.max.toLocaleString("en-IN")}. Here are lower-priced alternatives within your budget.`
       : `Ranked live listings for ${requirement.useCases?.join(", ") || "your stated needs"}${requirement.budget?.max != null ? ` within ₹${requirement.budget.max.toLocaleString("en-IN")}` : ""}.`,
   });
 

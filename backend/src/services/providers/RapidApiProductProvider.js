@@ -9,13 +9,13 @@ const BASE_URL = "https://real-time-product-search.p.rapidapi.com";
  * Google Shopping discovery through Real-Time Product Search for India.
  */
 export class RapidApiProductProvider extends ProductProvider {
-  async search(query, { category, signal, limit = 20 } = {}) {
+  async search(query, { category, signal, limit = 20, exactModel = false } = {}) {
     if (!env.rapidApi.key) {
       throw new Error("RapidApiProductProvider requires RAPIDAPI_KEY to be configured");
     }
 
     const url = new URL(`${BASE_URL}/search`);
-    url.searchParams.set("q", category ? `${query} ${category}` : query);
+    url.searchParams.set("q", !exactModel && category ? `${query} ${category}` : query);
     url.searchParams.set("limit", String(Math.min(limit, 40)));
     url.searchParams.set("page", "1");
     url.searchParams.set("country", "in");

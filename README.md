@@ -160,6 +160,13 @@ Real-Time Product Search, Google Search Master MEGA, then standard Google
 Search Master. Those retries can consume additional calls. Repeated queries
 can use the five-minute cache.
 
+Recommendation searches send only the Groq model name to every provider,
+without appending category, budget or use-case keywords. Google Search Master
+autocorrection is disabled for these lookups. Provider failures can switch
+providers for that same model; an empty or unrelated response does not trigger
+a broader discovery search. Simultaneous identical provider queries share one
+pending request as well as the completed-result cache.
+
 **4. Verification and selection.** Returned listings must match a shortlisted
 model and have an eligible Amazon India or Flipkart offer in INR inside the
 user's stated budget. Refurbished items, common accessories and different

@@ -4,6 +4,7 @@
 // without adding infrastructure.
 
 const store = new Map();
+const pending = new Map();
 
 export function get(key) {
   const entry = store.get(key);
@@ -21,7 +22,8 @@ export function set(key, value, ttlMs) {
 
 /**
  * Returns the cached value for `key` if present and fresh; otherwise calls
- * `fn()`, caches the result for `ttlMs`, and returns it.
+ * `fn()`, caches the result for `ttlMs`, and returns it. Concurrent requests
+ * for the same key share the pending call rather than consume another API call.
  */
 export async function wrap(key, ttlMs, fn) {
   const cached = get(key);
@@ -29,11 +31,21 @@ export async function wrap(key, ttlMs, fn) {
     console.log(`[CACHE] Served from cache: ${key}`);
     return cached;
   }
-  const value = await fn();
-  set(key, value, ttlMs);
-  return value;
+  const existing = pending.get(key);
+  if (existing) return existing;
+
+  const request = Promise.resolve().then(fn).then((value) => {
+    // A clear() or a replacement request invalidates this call's cache write.
+    if (pending.get(key) === request) set(key, value, ttlMs);
+    return value;
+  }).finally(() => {
+    if (pending.get(key) === request) pending.delete(key);
+  });
+  pending.set(key, request);
+  return request;
 }
 
 export function clear() {
   store.clear();
+  pending.clear();
 }

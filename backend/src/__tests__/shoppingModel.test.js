@@ -19,6 +19,14 @@ test("fold and flip suffixes cannot substitute for a base model", () => {
   assert.equal(matchesShoppingModel("Google Pixel 9 Pro Fold 256GB", "Google Pixel 9 Pro Fold", "Google"), true);
 });
 
+test("Fusion, Neo and Edge editions cannot substitute for a shortlisted base phone", () => {
+  assert.equal(matchesShoppingModel("Motorola Edge 60 Fusion 256GB", "Motorola Edge 60", "Motorola"), false);
+  assert.equal(matchesShoppingModel("Motorola Edge 60 Neo 256GB", "Motorola Edge 60", "Motorola"), false);
+  assert.equal(matchesShoppingModel("Samsung Galaxy S25 Edge 256GB", "Samsung Galaxy S25", "Samsung"), false);
+  assert.equal(matchesShoppingModel("Motorola Edge 60 Fusion 256GB", "Motorola Edge 60 Fusion", "Motorola"), true);
+  assert.equal(matchesShoppingModel("Motorola Edge 60 Neo 256GB", "Motorola Edge 60 Neo", "Motorola"), true);
+});
+
 test("MacBook model searches allow a retailer to insert a supported screen size before the chip", () => {
   for (const size of ["13", "13.6", "14", "15", "16"]) {
     for (const unit of ["", "-inch", " inch", " in", '"', "″"]) {

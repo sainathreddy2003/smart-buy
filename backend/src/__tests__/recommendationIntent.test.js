@@ -82,8 +82,8 @@ test("general phone requests shortlist before searching and ignore AI-inferred c
   assert.deepEqual(events, ["shortlist", "search", "search"]);
   assert.equal(groq.mock.callCount(), 1);
   assert.equal(fetch.mock.callCount(), 2);
-  assert.match(fetch.mock.calls[0].arguments[0].searchParams.get("q"), /Example Two/);
-  assert.match(fetch.mock.calls[1].arguments[0].searchParams.get("q"), /Example One/);
+  assert.equal(fetch.mock.calls[0].arguments[0].searchParams.get("q"), "Example Two");
+  assert.equal(fetch.mock.calls[1].arguments[0].searchParams.get("q"), "Example One");
   assert.deepEqual(result.picks.map(({ product }) => product.bestPrice), [40000, 45000]);
   assert.ok(result.picks.every(({ rankingSource, matchScore }) => rankingSource === "groq" && matchScore == null));
 });

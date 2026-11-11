@@ -3,7 +3,7 @@ import { Recommendation, serializeRecommendation } from "../models/Recommendatio
 import { PriceHistory } from "../models/PriceHistory.js";
 import { ApiError } from "../utils/ApiError.js";
 import { parseRequirementDeterministically } from "../utils/deterministicParser.js";
-import { matchesShoppingModel, searchProducts, isLiveModeActive } from "./productSearch.service.js";
+import { matchesShoppingModel, searchSuggestedProduct, isLiveModeActive } from "./productSearch.service.js";
 import { suggestProductNames } from "./ai.service.js";
 import { indianOffers } from "../utils/indianRetailers.js";
 import { parseRAM, parseStorage, tierFromCPU, tierFromGPU } from "../utils/normalization.js";
@@ -170,8 +170,8 @@ async function fetchCandidates(requirement, originalQuery, cameraFocused) {
   console.log(`[AI] ${models.length} models shortlisted before live shopping search`);
   const signal = AbortSignal.timeout(SHOPPING_SEARCH_TIMEOUT_MS);
   const lookups = await Promise.allSettled(models.map(async ({ name, brand }) => {
-    const listings = await searchProducts(name, {
-      category, budget, modelName: name, modelBrand: brand,
+    const listings = await searchSuggestedProduct({ name, brand }, {
+      category, budget,
       retailers: RECOMMENDATION_RETAILERS, limit: 40, signal,
     });
     const matching = groupCandidates(listings, category)

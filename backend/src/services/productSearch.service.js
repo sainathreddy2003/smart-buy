@@ -18,7 +18,7 @@ const SEARCH_CACHE_TTL_MS = 5 * 60 * 1000;
 const ACCESSORY_TITLE = /\b(?:case for|cover for|screen protector|tempered glass|replacement (?:screen|battery)|charger for|sleeve for|strap for)\b/i;
 const DEVICE_ACCESSORY_SUFFIX = /\b(?:case|cover|charger|sleeve|protector)\s*$/i;
 const NON_NEW_TITLE = /\b(?:refurbished|renewed|pre[- ]owned|second[- ]hand|open[- ]box|used)\b/i;
-const MODEL_SUFFIX = /^(?:pro|max|plus|ultra|mini|lite|fe|se|xl|power|fold|flip)\b/;
+const MODEL_SUFFIX = /^(?:pro|max|plus|ultra|mini|lite|fe|se|xl|power|fold|flip|fusion|neo|edge)\b/;
 const MACBOOK_SCREEN_SIZE = /\b(macbook (?:air|pro)) (?:13(?: 6)?|14|15|16) (?=m[1-9]\b)/;
 
 function normalizedTitle(title) {
@@ -49,24 +49,53 @@ export function isLiveModeActive() {
   return !env.useMockData && Boolean(env.serpApi.key || env.rapidApi.key);
 }
 
+// A caller's overall deadline stops only its wait. The cached provider call
+// has its own timeout so one shopper cannot cancel another shopper's lookup.
+function waitForSharedSearch(request, signal) {
+  if (!signal) return request;
+  return new Promise((resolve, reject) => {
+    const complete = (finish, value) => {
+      signal.removeEventListener("abort", onAbort);
+      finish(value);
+    };
+    const onAbort = () => complete(reject, signal.reason);
+    request.then((value) => complete(resolve, value), (error) => complete(reject, error));
+    if (signal.aborted) onAbort();
+    else signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+/** Recommendation lookups must be tied to a validated Groq model, never keywords. */
+export async function searchSuggestedProduct(model, options = {}) {
+  if (typeof model?.name !== "string" || !model.name.trim()
+    || typeof model?.brand !== "string" || !model.brand.trim()) {
+    throw ApiError.badRequest("A specific suggested product model and brand are required.");
+  }
+  return searchProducts(model.name.trim(), {
+    ...options, modelName: model.name.trim(), modelBrand: model.brand.trim(),
+  });
+}
+
 export async function searchProducts(query, { budget, modelName, modelBrand, preferredMinPrice, retailers, signal, limit = 15, ...opts } = {}) {
   if (!isLiveModeActive()) return [];
 
   const model = modelName && normalizedTitle(modelName);
   const brand = modelBrand && normalizedTitle(modelBrand);
+  const searchQuery = modelName ? modelName.trim() : query;
   // Look beyond the first few listings before filtering by budget and seller.
-  const providerOptions = { ...opts, limit: Math.max(limit, 15) };
+  const providerOptions = { ...opts, exactModel: Boolean(modelName), limit: Math.max(limit, 15) };
   for (const provider of LIVE_PROVIDERS) {
     if (signal?.aborted) break;
     const key = provider === serpApiProvider ? env.serpApi.key : env.rapidApi.key;
     if (!key) continue;
     const providerName = provider.host ?? provider.constructor.name;
-    const cacheKey = `product-search:${providerName}:${query}:${JSON.stringify(providerOptions)}`;
+    const cacheKey = `product-search:${providerName}:${searchQuery}:${JSON.stringify(providerOptions)}`;
     try {
-      const results = await wrap(cacheKey, SEARCH_CACHE_TTL_MS, () => {
+      const request = wrap(cacheKey, SEARCH_CACHE_TTL_MS, () => {
         const timeout = AbortSignal.timeout(provider === rapidApiProvider ? PRODUCT_SEARCH_TIMEOUT_MS : PROVIDER_TIMEOUT_MS);
-        return provider.search(query, { ...providerOptions, signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
+        return provider.search(searchQuery, { ...providerOptions, signal: timeout });
       });
+      const results = await waitForSharedSearch(request, signal);
       const eligible = results.flatMap((result) => {
         if (!result.name || result.category !== opts.category) return [];
         const title = result._rawTitle ?? result.name;
@@ -85,6 +114,7 @@ export async function searchProducts(query, { budget, modelName, modelBrand, pre
         : eligible.filter((result) => result.sellers.every((offer) => offer.price >= preferredMinPrice));
       return (preferred.length ? preferred : eligible).slice(0, limit);
     } catch (err) {
+      if (signal?.aborted) break;
       console.warn(`[SEARCH] ${providerName} failed, trying next provider: ${err.message}`);
     }
   }

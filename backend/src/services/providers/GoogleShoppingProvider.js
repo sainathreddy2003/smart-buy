@@ -16,16 +16,16 @@ export class GoogleShoppingProvider extends ProductProvider {
     this.host = mega ? "google-search-master-mega.p.rapidapi.com" : "google-search-master.p.rapidapi.com";
   }
 
-  async search(query, { category, signal, limit = 15 } = {}) {
+  async search(query, { category, signal, limit = 15, exactModel = false } = {}) {
     if (!env.rapidApi.key) {
       throw new Error("GoogleShoppingProvider requires RAPIDAPI_KEY to be configured");
     }
 
     const url = new URL(`https://${this.host}/shopping`);
-    url.searchParams.set("q", category ? `${query} ${category}` : query);
+    url.searchParams.set("q", !exactModel && category ? `${query} ${category}` : query);
     url.searchParams.set("gl", "in");
     url.searchParams.set("hl", "en");
-    url.searchParams.set("autocorrect", "true");
+    url.searchParams.set("autocorrect", exactModel ? "false" : "true");
     url.searchParams.set("num", String(limit));
     url.searchParams.set("page", "1");
 

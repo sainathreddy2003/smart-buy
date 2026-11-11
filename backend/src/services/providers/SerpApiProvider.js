@@ -19,7 +19,7 @@ function extractBrand(title) {
 export class SerpApiProvider extends ProductProvider {
   #rateLimitedUntil = 0;
 
-  async search(query, { category, signal, limit = 15 } = {}) {
+  async search(query, { category, signal, limit = 15, exactModel = false } = {}) {
     if (!env.serpApi.key) {
       throw new Error("SerpApiProvider requires SERPAPI_KEY to be configured");
     }
@@ -28,7 +28,7 @@ export class SerpApiProvider extends ProductProvider {
 
     const url = new URL(BASE_URL);
     url.searchParams.set("engine", "google_shopping");
-    url.searchParams.set("q", category ? `${query} ${category}` : query);
+    url.searchParams.set("q", !exactModel && category ? `${query} ${category}` : query);
     url.searchParams.set("api_key", env.serpApi.key);
     url.searchParams.set("gl", "in");
     url.searchParams.set("hl", "en");

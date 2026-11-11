@@ -62,7 +62,7 @@ test("saved product and recommendation prices exclude unapproved sellers", () =>
     { platform: "Flipkart", price: 70000, currency: "INR", url: "https://www.flipkart.com/item/p/123" },
     { platform: "Croma", price: 65000, currency: "INR", url: "https://croma.com.example.org/item" },
   ];
-  const product = new Product({ name: "Example phone", bestPrice: 62000, sellers });
+  const product = new Product({ name: "Example phone", category: "smartphone", bestPrice: 62000, sellers });
   const publicProduct = JSON.parse(JSON.stringify(product));
   assert.equal(publicProduct.bestPrice, 68000);
   assert.deepEqual(publicProduct.sellers.map(({ platform }) => platform), ["Amazon India", "Flipkart"]);

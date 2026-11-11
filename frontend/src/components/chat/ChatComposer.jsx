@@ -17,7 +17,7 @@ export function ChatComposer({ input, setInput, onSend, loading, isHero, selecte
     recognition.lang = "en-IN";
     recognition.onresult = (event) => {
       const transcript = event.results[0][0].transcript;
-      if (transcript) setInput((previous) => (previous ? `${previous} ${transcript}` : transcript).slice(0, messageLimit));
+      if (transcript) setInput((previous) => previous ? `${previous} ${transcript}` : transcript);
     };
     recognition.onerror = () => setVoiceError("Voice input is unavailable. You can type your request below.");
     recognition.onend = () => setListening(false);

@@ -152,6 +152,10 @@ the structured needs, original query and budget to Groq. It requests up to
 three distinct suitable models for any supported category. These are model
 suggestions, not verified availability or price quotes. If shortlisting fails,
 the app reports that failure instead of substituting unrelated products.
+The complete shopping message is the primary input; extracted fields support
+it rather than replacing it. Prompts support up to 4,000 characters, with an
+explicit error for oversized messages instead of silent clipping. Requested
+families such as iPhone or MacBook remain constraints on Groq's shortlist.
 
 **3. Exact-model live searches.** The engine searches each shortlisted model
 individually, with up to three lookups running in parallel. Discovery starts
@@ -174,6 +178,12 @@ model suffixes are excluded. The engine chooses one available configuration
 per matched model and preserves Groq's model order. If some lookups fail or
 return no eligible offer, fewer than three recommendations can be returned.
 It does not run separate retailer price requests to fill gaps.
+Matching a model name inside a title is not sufficient: the model must be the
+primary item and pass a category-aware whole-product check. Cases, compatible
+replacement screens, repair parts and standalone charging cases are rejected,
+while genuine device bundles remain eligible. The full provider title and
+Groq shortlist are saved for inspection. Saved recommendation responses also
+apply this check to previously accepted accessory listings.
 
 **5. Persistence and explanation.** Only the selected products and their
 qualifying live offers are saved. Listing text supplies any identifiable

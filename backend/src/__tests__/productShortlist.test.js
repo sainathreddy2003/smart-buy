@@ -11,6 +11,16 @@ function groqReply(products) {
   return { choices: [{ message: { content: JSON.stringify({ products }) } }] };
 }
 
+test("a Groq accessory suggestion is rejected before any shopping lookup is planned", async (t) => {
+  t.mock.method(Groq.Chat.Completions.prototype, "create", async () => groqReply([
+    { name: "Apple iPhone 15 Plus Cover Case", brand: "Apple" },
+    { name: "Apple iPhone 15 Plus LCD Display Assembly", brand: "Apple" },
+    { name: "Apple iPhone 15 Plus", brand: "Apple" },
+  ]));
+  const models = await suggestProductNames(parseRequirementDeterministically("best iphone under 1 lakh"));
+  assert.deepEqual(models, [{ name: "Apple iPhone 15 Plus", brand: "Apple" }]);
+});
+
 for (const category of ["smartphone", "laptop", "headphones", "smartwatch", "tablet", "monitor"]) {
   test(`shortlists ${category} models from the shopper's requirements before search`, async (t) => {
     const originalQuery = `${category} under 1 lakh`;
@@ -33,6 +43,47 @@ for (const category of ["smartphone", "laptop", "headphones", "smartwatch", "tab
     assert.equal(create.mock.callCount(), 1);
   });
 }
+
+test("Groq receives the entire original message verbatim, not a keyword summary", async (t) => {
+  const originalQuery = "  I need an iPhone under ₹1,00,000. Camera + long battery matter; no refurbished phones.\nFor my parents: తెలుగు photos, video calls, and easy use—not gaming. Keep 256GB if possible!  ";
+  const requirement = {
+    ...parseRequirementDeterministically(originalQuery),
+    keywords: ["phone", "camera", "budget"],
+    useCases: ["gaming"],
+  };
+  const create = t.mock.method(Groq.Chat.Completions.prototype, "create", async ({ messages }) => {
+    const input = JSON.parse(messages[1].content);
+    assert.equal(input.originalQuery, originalQuery);
+    assert.equal(Object.keys(input)[0], "originalQuery");
+    assert.deepEqual(input.keywords, ["phone", "camera", "budget"]);
+    assert.deepEqual(input.useCases, ["gaming"]);
+    assert.match(messages[0].content, /COMPLETE ORIGINAL MESSAGE/);
+    assert.match(messages[0].content, /PRIMARY\s+AUTHORITY/);
+    assert.match(messages[0].content, /never let inferred keywords override an explicit request/);
+    return groqReply([{ name: "Apple iPhone 16", brand: "Apple" }]);
+  });
+
+  assert.deepEqual(await suggestProductNames(requirement, { originalQuery }), [{ name: "Apple iPhone 16", brand: "Apple" }]);
+  assert.equal(create.mock.callCount(), 1);
+});
+
+test("shortlisting instructions preserve requested product families and excluded brands", async (t) => {
+  const originalQuery = "Best MacBook for editing and travel under 2 lakhs; avoid Windows laptops and replacement parts.";
+  t.mock.method(Groq.Chat.Completions.prototype, "create", async ({ messages }) => {
+    const input = JSON.parse(messages[1].content);
+    assert.equal(input.originalQuery, originalQuery);
+    assert.equal(input.budget.max, 200000);
+    assert.match(messages[0].content, /"iPhone" request permits only Apple iPhone models/);
+    assert.match(messages[0].content, /"MacBook" request\s+permits only Apple MacBook models/);
+    assert.match(messages[0].content, /Honor excluded brands and models/);
+    assert.match(messages[0].content, /Return complete devices only/);
+    assert.match(messages[0].content, /return an empty list rather than switching/);
+    return groqReply([{ name: "Apple MacBook Air M4", brand: "Apple" }]);
+  });
+  assert.deepEqual(await suggestProductNames(parseRequirementDeterministically(originalQuery), { originalQuery }), [
+    { name: "Apple MacBook Air M4", brand: "Apple" },
+  ]);
+});
 
 test("model shortlist preserves camera suitability, removes duplicate names, and caps searches at three models", async (t) => {
   t.mock.method(Groq.Chat.Completions.prototype, "create", async () => groqReply([

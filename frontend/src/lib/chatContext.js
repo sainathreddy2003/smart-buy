@@ -1,9 +1,12 @@
-export const SEARCH_QUERY_LIMIT = 500;
+export const SEARCH_QUERY_LIMIT = 4000;
 export const ADVISOR_MESSAGE_LIMIT = 1000;
 
 // Keep the latest request intact while retaining as much earlier context as fits.
 export function buildSearchQuery(queries) {
-  const latest = (queries.at(-1) || "").trim().slice(0, SEARCH_QUERY_LIMIT);
+  const latest = (queries.at(-1) || "").trim();
+  if (latest.length > SEARCH_QUERY_LIMIT) {
+    throw new RangeError(`Shopping requests must be ${SEARCH_QUERY_LIMIT} characters or fewer.`);
+  }
   const previous = queries.slice(0, -1).join(". ").trim();
   const remaining = SEARCH_QUERY_LIMIT - latest.length - 2;
   return previous && remaining > 0

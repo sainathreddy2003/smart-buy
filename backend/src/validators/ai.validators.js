@@ -3,7 +3,7 @@ import { CATEGORIES } from "../models/Product.js";
 
 export const analyzeRequirementSchema = z.object({
   body: z.object({
-    query: z.string().trim().min(3).max(500),
+    query: z.string().trim().min(3).max(4000),
   }),
 });
 

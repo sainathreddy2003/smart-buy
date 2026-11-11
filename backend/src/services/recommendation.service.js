@@ -168,6 +168,7 @@ async function fetchCandidates(requirement, originalQuery, cameraFocused) {
   const models = suggestions.filter(({ cameraFit }) => !cameraFocused
     || cameraFit === "strong" || (prefersValue && cameraFit === "value")).slice(0, 3);
   console.log(`[AI] ${models.length} models shortlisted before live shopping search`);
+  console.log(`[AI] Model shortlist: ${models.map(({ name }) => name).join(" | ")}`);
   const signal = AbortSignal.timeout(SHOPPING_SEARCH_TIMEOUT_MS);
   const lookups = await Promise.allSettled(models.map(async ({ name, brand }) => {
     const listings = await searchSuggestedProduct({ name, brand }, {
@@ -200,7 +201,7 @@ async function fetchCandidates(requirement, originalQuery, cameraFocused) {
     const product = cameraFocused ? "a shortlisted camera phone" : `a shortlisted ${category}`;
     throw ApiError.notFound(`I couldn’t find ${product} from Amazon India or Flipkart${budgetMessage} in this search.`);
   }
-  return { candidates, preferredMinPrice };
+  return { candidates, preferredMinPrice, shortlistedModels: models.map(({ name, brand }) => ({ name, brand })) };
 }
 
 async function persistChosenPicks(topEntries) {
@@ -219,6 +220,7 @@ async function persistChosenPicks(topEntries) {
       $set: {
         ...identity,
         brand: product.brand,
+        listingTitle: product.listingTitle,
         sellers: product.sellers,
         bestPrice: product.bestPrice,
         rating: product.rating,
@@ -428,7 +430,7 @@ export async function generateRecommendation(rawBody, userId, originalQuery) {
     || [...(requirement.useCases || []), ...(requirement.keywords || [])].join(" ");
   const cameraFocused = requirement.category === "smartphone"
     && CAMERA_REQUEST.test(cameraIntent);
-  const { candidates, preferredMinPrice } = await fetchCandidates(requirement, originalQuery, cameraFocused);
+  const { candidates, preferredMinPrice, shortlistedModels } = await fetchCandidates(requirement, originalQuery, cameraFocused);
   console.log(`[SEARCH] ${candidates.length} candidates fetched for category "${requirement.category}"`);
 
   const preferred = preferredMinPrice == null ? [] : candidates.filter((product) => product.bestPrice >= preferredMinPrice);
@@ -460,6 +462,7 @@ export async function generateRecommendation(rawBody, userId, originalQuery) {
     user: userId || undefined,
     preferences: requirement,
     originalQuery: originalQuery || undefined,
+    shortlistedModels,
     picks,
     summary: lowerPriceFallback
       ? `I couldn’t find a live offer between ₹${preferredMinPrice.toLocaleString("en-IN")} and ₹${requirement.budget.max.toLocaleString("en-IN")} in this search. Here are lower-priced ${cameraFocused ? "camera alternatives" : "alternatives"} within your budget.`

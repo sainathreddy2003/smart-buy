@@ -24,6 +24,9 @@ export const sellerSchema = new mongoose.Schema(
 const productSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
+    // Keep the provider title so later validation can see accessory/part words
+    // even when the display name was shortened for a card.
+    listingTitle: { type: String, trim: true },
     brand: { type: String, required: true, trim: true, index: true },
     category: { type: String, required: true, enum: CATEGORIES, index: true },
     model: { type: String, trim: true },

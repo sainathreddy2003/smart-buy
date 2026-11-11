@@ -27,6 +27,22 @@ test("Fusion, Neo and Edge editions cannot substitute for a shortlisted base pho
   assert.equal(matchesShoppingModel("Motorola Edge 60 Neo 256GB", "Motorola Edge 60 Neo", "Motorola"), true);
 });
 
+test("the model must be the primary product rather than a compatibility reference", () => {
+  const model = "Apple iPhone 15 Plus";
+  for (const title of [
+    "Compatible for Apple iPhone 15 Plus LCD Assembly",
+    "ESR Apple iPhone 15 Plus Case Clear",
+    "Replacement Screen for Apple iPhone 15 Plus",
+    "Screen Protector Apple iPhone 15 Plus",
+  ]) assert.equal(matchesShoppingModel(title, model, "Apple"), false, title);
+  assert.equal(matchesShoppingModel("Apple iPhone 15 Plus 128GB Blue", model, "Apple"), true);
+  assert.equal(matchesShoppingModel("iPhone 15 Plus 128GB Blue", model, "Apple"), true);
+  assert.equal(matchesShoppingModel("Apple iPhone 15 Plus (128 GB) Blue", "Apple iPhone 15 Plus 128GB", "Apple"), true);
+  assert.equal(matchesShoppingModel("Apple iPhone 15 Plus (Black, 128 GB)", "Apple iPhone 15 Plus 128GB", "Apple"), true);
+  assert.equal(matchesShoppingModel("Apple iPhone 15 Plus (Black, 256 GB)", "Apple iPhone 15 Plus 128GB", "Apple"), false);
+  assert.equal(matchesShoppingModel("Apple iPhone 15 Pro (Black, 128 GB)", "Apple iPhone 15 128GB", "Apple"), false);
+});
+
 test("MacBook model searches allow a retailer to insert a supported screen size before the chip", () => {
   for (const size of ["13", "13.6", "14", "15", "16"]) {
     for (const unit of ["", "-inch", " inch", " in", '"', "″"]) {

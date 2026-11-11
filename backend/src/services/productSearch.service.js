@@ -1,6 +1,7 @@
 import { ApiError } from "../utils/ApiError.js";
 import { env } from "../config/env.js";
 import { indianOffers } from "../utils/indianRetailers.js";
+import { isWholeProductListing } from "../utils/productListing.js";
 import { GoogleShoppingProvider } from "./providers/GoogleShoppingProvider.js";
 import { RapidApiProductProvider } from "./providers/RapidApiProductProvider.js";
 import { SerpApiProvider } from "./providers/SerpApiProvider.js";
@@ -15,8 +16,6 @@ const LIVE_PROVIDERS = [serpApiProvider, rapidApiProvider, googleMegaProvider, g
 const PROVIDER_TIMEOUT_MS = 3200;
 const PRODUCT_SEARCH_TIMEOUT_MS = 5000;
 const SEARCH_CACHE_TTL_MS = 5 * 60 * 1000;
-const ACCESSORY_TITLE = /\b(?:case for|cover for|screen protector|tempered glass|replacement (?:screen|battery)|charger for|sleeve for|strap for)\b/i;
-const DEVICE_ACCESSORY_SUFFIX = /\b(?:case|cover|charger|sleeve|protector)\s*$/i;
 const NON_NEW_TITLE = /\b(?:refurbished|renewed|pre[- ]owned|second[- ]hand|open[- ]box|used)\b/i;
 const MODEL_SUFFIX = /^(?:pro|max|plus|ultra|mini|lite|fe|se|xl|power|fold|flip|fusion|neo|edge)\b/;
 const MACBOOK_SCREEN_SIZE = /\b(macbook (?:air|pro)) (?:13(?: 6)?|14|15|16) (?=m[1-9]\b)/;
@@ -25,6 +24,7 @@ function normalizedTitle(title) {
   const value = title.toLowerCase()
     .replace(/\+/g, " plus ")
     .replace(/(\d)plus\b/g, "$1 plus")
+    .replace(/\b(\d+(?:\.\d+)?)\s*(gb|tb)\b/g, "$1$2")
     // Retailers insert the screen size before the chip in MacBook names.
     // Canonicalize its optional unit without removing the explicit size.
     .replace(/\b(macbook\s+(?:air|pro))\s+(13(?:\.6)?|14|15|16)(?:\s*-?\s*(?:inch(?:es)?|in\b|["″]))?\s+(?=m[1-9]\b)/gi, "$1 $2 ");
@@ -36,9 +36,26 @@ function matchesModel(title, model, brand) {
   // Only ignore this narrowly defined insertion when the requested model
   // omits a size. A supplied size, chip, suffix or capacity must still match.
   if (!MACBOOK_SCREEN_SIZE.test(model)) name = name.replace(MACBOOK_SCREEN_SIZE, "$1 ");
+  // Retailers may put the colour before a requested phone capacity. Keep
+  // that capacity mandatory without treating the colour as another model.
+  const capacities = model.match(/\b\d+(?:\.\d+)?(?:gb|tb)\b/g) || [];
+  const trailingCapacity = model.match(/ (\d+(?:\.\d+)?(?:gb|tb)) $/);
+  if (capacities.length === 1 && trailingCapacity) {
+    if (!name.includes(` ${trailingCapacity[1]} `)) return false;
+    model = model.slice(0, -trailingCapacity[0].length) + " ";
+  }
   const withoutBrand = brand && model.length > brand.length && model.startsWith(brand) ? ` ${model.slice(brand.length)}` : model;
   const index = name.indexOf(withoutBrand);
-  return index >= 0 && !MODEL_SUFFIX.test(name.slice(index + withoutBrand.length));
+  if (index < 0 || MODEL_SUFFIX.test(name.slice(index + withoutBrand.length))) return false;
+  // Naming a compatible model is not enough: that model must be the subject
+  // of the listing, optionally preceded by its manufacturer or simple promo.
+  const prefix = name.slice(0, index).trim()
+    .replace(/\b(?:new|brand new|latest|original|genuine|unlocked|20\d{2})\b/g, " ")
+    .replace(/\s+/g, " ").trim();
+  const manufacturer = brand?.trim();
+  return !prefix || prefix === manufacturer
+    || (manufacturer === "redmi" && prefix === "xiaomi redmi")
+    || (manufacturer === "poco" && prefix === "xiaomi poco");
 }
 
 export function matchesShoppingModel(title, modelName, modelBrand) {
@@ -99,8 +116,7 @@ export async function searchProducts(query, { budget, modelName, modelBrand, pre
       const eligible = results.flatMap((result) => {
         if (!result.name || result.category !== opts.category) return [];
         const title = result._rawTitle ?? result.name;
-        if (ACCESSORY_TITLE.test(title) || NON_NEW_TITLE.test(title)) return [];
-        if (["smartphone", "laptop"].includes(opts.category) && DEVICE_ACCESSORY_SUFFIX.test(title)) return [];
+        if (!isWholeProductListing(title, opts.category) || NON_NEW_TITLE.test(title)) return [];
         if (model && !matchesModel(title, model, brand)) return [];
         const sellers = indianOffers((result.sellers || []).filter((offer) =>
           offer.price >= (budget?.min ?? 0) &&

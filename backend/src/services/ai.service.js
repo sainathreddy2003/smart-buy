@@ -4,6 +4,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { CATEGORIES } from "../models/Product.js";
 import { structuredRequirementSchema, productSuggestionSchema } from "../validators/ai.validators.js";
 import { detectBudget, parseRequirementDeterministically } from "../utils/deterministicParser.js";
+import { isWholeProductListing } from "../utils/productListing.js";
 
 // Client is created lazily — GROQ_API_KEY is optional, and the app must be
 // able to run (via the deterministic fallback) with it unset entirely.
@@ -167,8 +168,15 @@ export async function analyzeRequirement(text) {
 }
 
 const PRODUCT_SUGGESTION_SYSTEM_PROMPT = `You are SmartBuy AI's product shortlisting step, BEFORE live shopping search.
-Use the shopper's structured category, INR budget, requirements, use cases,
-priorities, keywords, and originalQuery to suggest suitable real product models.
+The originalQuery field contains the shopper's COMPLETE ORIGINAL MESSAGE,
+verbatim. Read that whole message before selecting any model. It is the PRIMARY
+AUTHORITY for shopping intent, requested brand or product family, intended use,
+preferences, exclusions, and tradeoffs. Do not replace it with a keyword list
+or assume that the structured fields capture everything the shopper said.
+The structured category, INR budget, requirements, use cases, priorities and
+keywords are supporting context. Respect the validated INR budget boundaries;
+never let inferred keywords override an explicit request in originalQuery.
+When originalQuery is absent, use the supplied guided requirements instead.
 The shopping providers will search these models afterward and verify actual
 prices and availability. You have no live shopping data in this step.
 
@@ -179,9 +187,15 @@ Rules:
 - Return at most THREE distinct models, ordered by suitability for the stated
   needs. Choose only actual models you can confidently identify. Return fewer,
   or an empty list, rather than inventing products.
-- Each name must identify a specific brand and model, such as "Sony WH-1000XM5"
-  or "Apple MacBook Air M3". Never return generic terms such as "camera phone",
-  a retailer listing title, accessories, several models in one name, or a URL.
+- Each name must identify a specific manufacturer, model and relevant generation.
+  Never return generic terms such as "camera phone", a retailer listing title,
+  several models in one name, or a URL. Return complete devices only, never
+  phone cases, replacement displays, cables, chargers, or other accessories.
+- Preserve explicit brand and product-family requests in the full message:
+  an "iPhone" request permits only Apple iPhone models, and a "MacBook" request
+  permits only Apple MacBook models. Honor excluded brands and models too.
+  If none fit the request and budget, return an empty list rather than switching
+  brands, families, categories, or returning accessories to fill the list.
 - Prefer models sold in the Indian market and plausibly within the stated
   budget. Respect any explicit minimum, maximum, and requested configuration.
   Treat preferredMinPrice as a preference, not a hard minimum or a measure of
@@ -209,10 +223,10 @@ export async function suggestProductNames(requirement, { preferredMinPrice, orig
     const result = await completeJSON({
       system: PRODUCT_SUGGESTION_SYSTEM_PROMPT,
       user: JSON.stringify({
+        originalQuery,
         category: requirement.category,
         budget: requirement.budget,
         preferredMinPrice,
-        originalQuery,
         cameraFocused,
         useCases: requirement.useCases,
         requirements: requirement.requirements,
@@ -232,6 +246,7 @@ export async function suggestProductNames(requirement, { preferredMinPrice, orig
       .replace(/\+/g, " plus ").replace(/(\d)plus\b/g, "$1 plus")
       .replace(/[^\p{L}\p{N}]+/gu, " ").trim();
     return parsed.data.products.flatMap(({ name, brand, cameraFit }) => {
+      if (!isWholeProductListing(name, requirement.category)) return [];
       const normalizedName = normalizeName(name);
       const normalizedBrand = normalizeName(brand);
       const model = normalizedName.startsWith(`${normalizedBrand} `)

@@ -110,8 +110,16 @@ function ChatSession({ productId }) {
   }
 
   async function send(text) {
-    const trimmed = text.trim().slice(0, advisorTarget ? ADVISOR_MESSAGE_LIMIT : SEARCH_QUERY_LIMIT);
+    const trimmed = text.trim();
     if (!trimmed || loading) return;
+    const messageLimit = advisorTarget ? ADVISOR_MESSAGE_LIMIT : SEARCH_QUERY_LIMIT;
+    if (trimmed.length > messageLimit) {
+      pushMessage({
+        role: "assistant", kind: "text", error: true,
+        text: `Your message is too long. Please keep it within ${messageLimit.toLocaleString("en-IN")} characters so I can send the complete message.`,
+      });
+      return;
+    }
 
     const history = buildChatHistory(messages);
     pushMessage({ role: "user", text: trimmed });

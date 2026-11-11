@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { sellerSchema } from "./Product.js";
 import { withIndianOffers } from "../utils/indianRetailers.js";
+import { isWholeProductListing } from "../utils/productListing.js";
 
 const pickSchema = new mongoose.Schema(
   {
@@ -26,6 +27,7 @@ const recommendationSchema = new mongoose.Schema(
     // The shopper's original free-text search, when this came from the
     // natural-language search box — shown back to them on the results page.
     originalQuery: { type: String, trim: true },
+    shortlistedModels: [{ name: { type: String, required: true }, brand: { type: String, required: true }, _id: false }],
     picks: [pickSchema],
     summary: { type: String },
   },
@@ -40,6 +42,7 @@ export function serializeRecommendation(recommendation) {
   const { min, max } = response.preferences?.budget ?? {};
   response.picks = response.picks.flatMap(({ product, offers, ...pick }) => {
     if (!product?.name) return [];
+    if (!isWholeProductListing(product.listingTitle || product.name, product.category || response.preferences?.category)) return [];
     const eligible = (offers ?? product.sellers ?? []).filter(({ price }) => price >= (min ?? 0) && price <= (max ?? Infinity));
     const filteredProduct = withIndianOffers(product, eligible);
     return filteredProduct.sellers.length ? [{ ...pick, product: filteredProduct }] : [];

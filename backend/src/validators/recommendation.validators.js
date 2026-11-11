@@ -10,8 +10,8 @@ export const createRecommendationSchema = z.object({
     .object({
       category: z.enum(CATEGORIES),
       // The original free-text query, if this came from the natural-language
-      // search box — used only for search-history logging.
-      query: z.string().trim().max(500).optional(),
+      // search box — preserved for Groq shortlisting and search-history logging.
+      query: z.string().trim().max(4000).optional(),
 
       // Legacy guided-wizard fields.
       budgetMin: z.number().min(0).optional(),

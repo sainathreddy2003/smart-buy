@@ -1,6 +1,6 @@
 import { env } from "../../config/env.js";
 import { fetchRapidApiShopping } from "./rapidApiShopping.js";
-import { ProductProvider } from "./ProductProvider.js";
+import { isNewAvailableListing, ProductProvider } from "./ProductProvider.js";
 import { parseInrPrice } from "../../utils/normalization.js";
 
 const BASE_URL = "https://real-time-product-search.p.rapidapi.com";
@@ -21,7 +21,7 @@ export class RapidApiProductProvider extends ProductProvider {
     url.searchParams.set("country", "in");
     url.searchParams.set("language", "en");
     url.searchParams.set("sort_by", "BEST_MATCH");
-    url.searchParams.set("product_condition", "ANY");
+    url.searchParams.set("product_condition", "NEW");
     url.searchParams.set("return_filters", "false");
 
     const response = await fetchRapidApiShopping(url, { signal });
@@ -34,38 +34,39 @@ export class RapidApiProductProvider extends ProductProvider {
     if (json?.status === "ERROR" || !Array.isArray(json?.data?.products)) {
       throw new Error("Real-Time Product Search returned invalid product data");
     }
-    const results = json.data.products;
+    return json.data.products.flatMap((product) => {
+      if (!isNewAvailableListing(product)) return [];
+      const offers = [
+        { ...product, ...product.offer, offer_page_url: product.offer?.offer_page_url || product.product_page_url || product.product_url },
+        ...(Array.isArray(product.offers) ? product.offers : []),
+      ];
+      return offers.flatMap((offer) => {
+        if (!offer || !isNewAvailableListing(offer)) return [];
+        const name = offer.offer_title || product.product_title;
+        const price = parseInrPrice(offer.price);
+        const currency = offer.currency ?? product.currency;
+        if (currency && !/^(?:INR|₹)$/i.test(currency)) return [];
+        if (!name || price == null || !offer.offer_page_url) return [];
 
-    return results
-      .map((r) => {
-        const offer = r.offer;
-        const price = parseInrPrice(offer?.price ?? r.price);
-        const productUrl = offer?.offer_page_url || r.product_page_url || r.product_url;
-        const currency = offer?.currency ?? r.currency;
-        if (currency && !/^(?:INR|₹)$/i.test(currency)) return null;
-        if (!r.product_title || price == null || !productUrl) return null;
-
-        return {
-          name: r.product_title.slice(0, 120),
-          brand: r.product_title.split(" ")[0],
+        return [{
+          name: name.slice(0, 120),
+          _rawTitle: name,
+          brand: name.split(" ")[0],
           category: category || "smartphone",
-          sellers: [
-            {
-              platform: offer?.store_name || r.store_name || "Online retailer",
-              price,
-              currency: "INR",
-              url: productUrl,
-              availability: (offer?.in_stock ?? r.in_stock) !== false,
-            },
-          ],
-          image: r.product_photos?.[0],
-          rating: r.product_rating,
+          sellers: [{
+            platform: offer.store_name || "Online retailer",
+            price,
+            currency: "INR",
+            url: offer.offer_page_url,
+            availability: true,
+          }],
+          image: product.product_photos?.[0],
+          rating: product.product_rating,
           source: "rapidapi",
-          sourceProductId: r.product_id,
-          shoppingHistoryId: typeof r.product_id === "string" ? r.product_id : undefined,
-        };
-      })
-      .filter(Boolean)
-      .slice(0, limit);
+          sourceProductId: product.product_id,
+          shoppingHistoryId: typeof product.product_id === "string" ? product.product_id : undefined,
+        }];
+      });
+    }).slice(0, limit);
   }
 }

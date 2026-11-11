@@ -27,7 +27,7 @@ const REFRESH_COOKIE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 export function setRefreshCookie(res, token) {
   res.cookie(REFRESH_COOKIE_NAME, token, {
     httpOnly: true,
-    secure: env.nodeEnv === "production",
+    secure: env.nodeEnv === "production" && !env.allowLocalHttpCookies,
     sameSite: "lax",
     maxAge: REFRESH_COOKIE_MAX_AGE_MS,
     path: "/api/auth",

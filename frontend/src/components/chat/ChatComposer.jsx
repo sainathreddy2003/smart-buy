@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowRight, ArrowUp, Mic, MicOff, SlidersHorizontal } from "lucide-react";
 import { Link } from "react-router-dom";
 import { CategorySelect } from "./CategorySelect";
+import { ADVISOR_MESSAGE_LIMIT, SEARCH_QUERY_LIMIT } from "../../lib/chatContext";
 
-export function ChatComposer({ input, setInput, onSend, loading, isHero, selectedCategory, setSelectedCategory }) {
+export function ChatComposer({ input, setInput, onSend, loading, isHero, selectedCategory, setSelectedCategory, advisor = false }) {
   const recognitionRef = useRef(null);
   const [listening, setListening] = useState(false);
   const [voiceError, setVoiceError] = useState("");
+  const messageLimit = advisor ? ADVISOR_MESSAGE_LIMIT : SEARCH_QUERY_LIMIT;
 
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -15,7 +17,7 @@ export function ChatComposer({ input, setInput, onSend, loading, isHero, selecte
     recognition.lang = "en-IN";
     recognition.onresult = (event) => {
       const transcript = event.results[0][0].transcript;
-      if (transcript) setInput((previous) => previous ? `${previous} ${transcript}` : transcript);
+      if (transcript) setInput((previous) => (previous ? `${previous} ${transcript}` : transcript).slice(0, messageLimit));
     };
     recognition.onerror = () => setVoiceError("Voice input is unavailable. You can type your request below.");
     recognition.onend = () => setListening(false);
@@ -27,7 +29,7 @@ export function ChatComposer({ input, setInput, onSend, loading, isHero, selecte
       recognition.abort();
       recognitionRef.current = null;
     };
-  }, [setInput]);
+  }, [setInput, messageLimit]);
 
   function toggleVoice() {
     const recognition = recognitionRef.current;
@@ -60,10 +62,10 @@ export function ChatComposer({ input, setInput, onSend, loading, isHero, selecte
       )}
       <form className={isHero ? "shop-composer shop-composer-start" : "shop-composer"} onSubmit={submit}>
         <textarea
-          aria-label="Shopping request"
-          placeholder={listening ? "Listening…" : isHero ? "What are you shopping for today?" : "Example: Laptop for video editing under ₹80,000"}
+          aria-label={advisor ? "Question for your advisor" : "Shopping request"}
+          placeholder={listening ? "Listening…" : advisor ? "Ask about price, specifications, or which one to buy…" : isHero ? "What are you shopping for today?" : "Example: Laptop for video editing under ₹80,000"}
           rows={isHero ? 1 : 2}
-          maxLength={500}
+          maxLength={messageLimit}
           value={input}
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={(event) => {
@@ -76,7 +78,7 @@ export function ChatComposer({ input, setInput, onSend, loading, isHero, selecte
         {isHero && <button type="submit" className="shop-send" disabled={loading || !input.trim()} aria-label="Send shopping request"><ArrowRight size={20} /></button>}
         {voiceError && <p role="status" className="px-2 pb-2 text-xs text-[var(--color-danger)]">{voiceError}</p>}
         <div className="shop-composer-actions">
-          <CategorySelect value={selectedCategory} onChange={setSelectedCategory} />
+          <CategorySelect value={selectedCategory} onChange={setSelectedCategory} disabled={loading} />
           <div className="flex items-center gap-1">
             <button type="button" className="shop-icon" onClick={toggleVoice} aria-label={listening ? "Stop voice input" : "Use voice input"} aria-pressed={listening}>
               {listening ? <MicOff size={18} /> : <Mic size={18} />}
@@ -85,6 +87,7 @@ export function ChatComposer({ input, setInput, onSend, loading, isHero, selecte
           </div>
         </div>
       </form>
+      {advisor && <p className="mt-2 px-2 text-xs text-[#696378]">Start a new session or choose a category to search for other products.</p>}
       {isHero && <Link to="/recommend" className="shop-text-link chat-guided-link"><SlidersHorizontal size={16} /> Try guided search</Link>}
     </div>
   );

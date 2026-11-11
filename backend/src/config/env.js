@@ -10,10 +10,13 @@ function required(name) {
   return value;
 }
 
+const clientUrl = process.env.CLIENT_URL || process.env.RENDER_EXTERNAL_URL || "http://localhost:5173";
+
 export const env = {
   port: process.env.PORT || 5000,
   nodeEnv: process.env.NODE_ENV || "development",
-  clientUrl: process.env.CLIENT_URL || process.env.RENDER_EXTERNAL_URL || "http://localhost:5173",
+  clientUrl,
+  allowLocalHttpCookies: process.env.LOCAL_HTTP_COOKIES === "true" && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(clientUrl),
   mongoUri: required("MONGO_URI"),
   jwt: {
     accessSecret: required("JWT_ACCESS_SECRET"),

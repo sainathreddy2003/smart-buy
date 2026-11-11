@@ -57,7 +57,7 @@ export const productSuggestionSchema = z.object({
   products: z
     .array(
       z.object({
-        name: z.string().trim().min(2).max(80),
+        name: z.string().trim().min(2).max(120),
         brand: z.string().trim().min(1).max(40).optional(),
         cameraFit: z.enum(["strong", "value", "uncertain"]).optional(),
       })

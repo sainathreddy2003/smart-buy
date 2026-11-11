@@ -1,18 +1,15 @@
-FROM node:22-alpine
+FROM node:24-alpine
 
 WORKDIR /app
 
-# Install curl for healthcheck
-RUN apk add --no-cache curl
-
-# Install dependencies
 COPY package*.json ./
-RUN npm install
+RUN npm ci --omit=dev
 
-# Copy application source
-COPY . .
-RUN chmod +x ./docker-entrypoint.sh
+COPY src ./src
 
+ENV NODE_ENV=production
+ENV PORT=5050
+USER node
 EXPOSE 5050
 
-ENTRYPOINT ["./docker-entrypoint.sh"]
+CMD ["node", "src/server.js"]

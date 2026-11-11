@@ -1,13 +1,13 @@
 # Stage 1: Build Vite React application
-FROM node:22-alpine AS builder
+FROM node:24-alpine AS builder
 
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install
+RUN npm ci --include=dev
 
 COPY . .
-RUN npm run build
+RUN VITE_API_URL=/api npm run build
 
 # Stage 2: Serve with Nginx
 FROM nginx:alpine

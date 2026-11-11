@@ -111,7 +111,7 @@ export default function Results() {
         </div>
       </div>
 
-      <ChatPanel recommendationId={recommendation._id} />
+      <ChatPanel key={recommendation._id} recommendationId={recommendation._id} />
     </div>
   );
 }

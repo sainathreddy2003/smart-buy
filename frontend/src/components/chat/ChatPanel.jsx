@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { MessageCircle, X, Send, Sparkles } from "lucide-react";
 import { api, getErrorMessage } from "../../lib/api";
 import { Spinner } from "../ui/Spinner";
+import { ADVISOR_MESSAGE_LIMIT, buildChatHistory } from "../../lib/chatContext";
 
 export function ChatPanel({ recommendationId }) {
   const [open, setOpen] = useState(false);
@@ -23,10 +24,10 @@ export function ChatPanel({ recommendationId }) {
 
   async function sendMessage(e) {
     e.preventDefault();
-    const message = input.trim();
+    const message = input.trim().slice(0, ADVISOR_MESSAGE_LIMIT);
     if (!message || loading) return;
 
-    const history = messages.map(({ role, content }) => ({ role, content }));
+    const history = buildChatHistory(messages);
     setMessages((m) => [...m, { role: "user", content: message }]);
     setInput("");
     setLoading(true);
@@ -122,6 +123,7 @@ export function ChatPanel({ recommendationId }) {
               <div className="flex items-center gap-2">
                 <input
                   type="text"
+                  maxLength={ADVISOR_MESSAGE_LIMIT}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   placeholder="Ask a question about these picks..."

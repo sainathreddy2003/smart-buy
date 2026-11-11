@@ -1,5 +1,5 @@
 import { env } from "../../config/env.js";
-import { ProductProvider } from "./ProductProvider.js";
+import { isNewAvailableListing, ProductProvider } from "./ProductProvider.js";
 import { parseInrPrice } from "../../utils/normalization.js";
 
 const BASE_URL = "https://serpapi.com/search.json";
@@ -48,15 +48,20 @@ export class SerpApiProvider extends ProductProvider {
     if (typeof json.error === "string" && /hasn't returned any results/i.test(json.error)) return [];
     if (json.error) throw new Error("SerpApi returned an error for this search");
 
-    const results = json.shopping_results || [];
+    const results = [
+      ...(json.shopping_results ?? []),
+      ...(json.categorized_shopping_results ?? []).flatMap(({ shopping_results }) => shopping_results ?? []),
+    ];
 
     return results
       .map((r) => {
+        if (!isNewAvailableListing(r) || (r.currency && !/^(?:INR|₹)$/i.test(r.currency))) return null;
         const price = parseInrPrice(r.price ?? r.extracted_price);
         const link = r.direct_link || r.link || r.product_link;
         if (!r.title || price == null || !link) return null;
         return {
           name: r.title.slice(0, 120),
+          _rawTitle: r.title,
           brand: extractBrand(r.title),
           category: category || "smartphone",
           sellers: [{

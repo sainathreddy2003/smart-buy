@@ -20,6 +20,13 @@
  * @method search(query: string, opts: {category?: string, limit?: number}) => Promise<ProviderProduct[]>
  */
 
+export function isNewAvailableListing(listing) {
+  const condition = listing.product_condition ?? listing.second_hand_condition ?? listing.condition;
+  return (condition == null || condition === "" || /^(?:brand[ _-])?new$/i.test(condition))
+    && listing.in_stock !== false && listing.availability !== false
+    && !/^(?:out[ _-]of[ _-]stock|unavailable|sold[ _-]out)$/i.test(listing.availability ?? "");
+}
+
 export class ProductProvider {
   /**
    * @param {string} query

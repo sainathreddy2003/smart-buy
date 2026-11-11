@@ -48,15 +48,36 @@ export async function completeJSON({ system, user, temperature = 0.4, signal }) 
 }
 
 export async function completeChat({ system, history, temperature = 0.5 }) {
-  if (!client) throw new Error("AI provider not configured (GROQ_API_KEY unset)");
+  if (!client) {
+    throw new ApiError(503, "The AI advisor is not configured yet. Please contact the site owner to enable it.");
+  }
 
   const messages = [{ role: "system", content: system }, ...history];
-  const response = await client.chat.completions.create({
-    model: env.groq.model,
-    messages,
-    temperature,
-  });
-  return response.choices[0]?.message?.content ?? "";
+  let response;
+  try {
+    response = await client.chat.completions.create({
+      model: env.groq.model,
+      messages,
+      temperature,
+      max_completion_tokens: 1200,
+    }, { timeout: 15000, maxRetries: 0 });
+  } catch (err) {
+    // Log only diagnostic categories; provider messages can contain request data.
+    console.warn(`[AI] Follow-up chat failed (status=${err.status ?? "unknown"}, type=${err.constructor?.name ?? err.name})`);
+    if (err.status === 429) {
+      throw new ApiError(503, "The AI advisor is busy or has reached its usage limit. Please try again shortly.");
+    }
+    if (err.status === 401 || err.status === 403) {
+      throw new ApiError(503, "The AI advisor could not connect with its current credentials. Please contact the site owner.");
+    }
+    if (err instanceof Groq.APIConnectionTimeoutError || err.name === "TimeoutError") {
+      throw new ApiError(504, "The AI advisor took too long to respond. Please try again.");
+    }
+    throw new ApiError(503, "The AI advisor is temporarily unavailable. Please try again shortly.");
+  }
+  const reply = response.choices?.[0]?.message?.content?.trim();
+  if (!reply) throw new ApiError(503, "The AI advisor returned no answer. Please try again.");
+  return reply;
 }
 
 const REQUIREMENT_SYSTEM_PROMPT = `You are SmartBuy AI's requirement analyzer.
@@ -170,6 +191,9 @@ Rules:
   "uncertain" when camera suitability is unclear. For a best-camera request
   with room for camera flagships, favor established camera-focused models.
   Battery life, megapixel count, and low price alone don't establish camera fit.
+- When availableProducts is provided, select only from those listings, copy
+  each selected name exactly, and return fewer than four if needed. Return an
+  empty list if none qualify. Avoid recommending multiple listings of the same model.
 - Favor products actually common in the Indian market (Samsung, OnePlus,
   Xiaomi, Realme, Motorola, Vivo, Oppo, Apple, Nothing, Asus, Lenovo, HP,
   Dell, Acer, boAt, Noise, JBL, Sony, etc.) over obscure or region-locked ones.
@@ -179,19 +203,9 @@ Rules:
   omit it rather than guessing.`;
 
 /**
- * Names real, currently-sold products worth searching live shopping APIs
- * for — the AI proposes WHICH products to look up, it never states their
- * price/specs itself. This exists because a generic keyword search (e.g.
- * "smartphone gaming budget") against a shopping API returns whatever
- * loosely matches those words, which is often irrelevant; searching for an
- * AI-suggested specific model name ("OnePlus 13") returns that actual
- * product's real listings instead. A hallucinated name simply returns zero
- * live results and gets silently dropped by the caller — see
- * fetchCandidates in recommendation.service.js, which falls back to the
- * live keyword search if this returns
- * nothing usable, so this step is an optimization, never a hard dependency.
+ * Orders the available live listings for a camera-focused request.
  */
-export async function suggestProductNames(requirement, { preferredMinPrice, originalQuery, cameraFocused } = {}) {
+export async function suggestProductNames(requirement, { preferredMinPrice, originalQuery, cameraFocused, availableProducts } = {}) {
   if (!client) return null;
 
   const signal = AbortSignal.timeout(3500);
@@ -204,6 +218,7 @@ export async function suggestProductNames(requirement, { preferredMinPrice, orig
         preferredMinPrice,
         originalQuery,
         cameraFocused,
+        availableProducts,
         useCases: requirement.useCases,
         priorities: requirement.priorities,
         keywords: requirement.keywords,

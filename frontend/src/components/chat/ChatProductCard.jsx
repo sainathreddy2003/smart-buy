@@ -4,7 +4,7 @@ export function ChatProductCard({ pick }) {
   const { product, matchScore, rankingSource, reasoning, tradeoffs, rank } = pick;
 
   return (
-    <div className="w-72 max-w-full flex-none">
+    <div className="min-w-0 w-full">
       <AppleProductCard
         product={product}
         rank={rank}

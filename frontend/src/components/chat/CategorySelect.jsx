@@ -12,7 +12,7 @@ const CATEGORIES = [
   { id: "tablet", name: "Tablets", icon: "📱" },
 ];
 
-export function CategorySelect({ value = "all", onChange }) {
+export function CategorySelect({ value = "all", onChange, disabled = false }) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef(null);
 
@@ -34,6 +34,7 @@ export function CategorySelect({ value = "all", onChange }) {
     <div ref={containerRef} className="relative inline-block text-left">
       <button
         type="button"
+        disabled={disabled}
         onClick={() => setOpen((prev) => !prev)}
         className="flex items-center justify-between gap-2 rounded-lg border border-[#e3e0ea] bg-[#f3f2f7] px-3 h-8.5 min-w-[135px] text-xs text-[#191626] transition-colors hover:border-[#653ad7]/40 hover:bg-[#edeaf6] focus:outline-none cursor-pointer"
       >
@@ -48,7 +49,7 @@ export function CategorySelect({ value = "all", onChange }) {
       </button>
 
       <AnimatePresence>
-        {open && (
+        {open && !disabled && (
           <motion.div
             initial={{ opacity: 0, y: 6, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}

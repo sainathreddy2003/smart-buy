@@ -208,7 +208,7 @@ export default function ProductDetail() {
             >
               3D Showcase
             </Button>
-            <Link to="/chat">
+            <Link to={`/chat?productId=${encodeURIComponent(product._id)}`} state={{ productName: product.name }}>
               <Button variant="primary" size="sm">
                 Ask AI Advisor
               </Button>

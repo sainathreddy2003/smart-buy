@@ -16,6 +16,8 @@ const PROVIDER_TIMEOUT_MS = 3200;
 const PRODUCT_SEARCH_TIMEOUT_MS = 5000;
 const SEARCH_CACHE_TTL_MS = 5 * 60 * 1000;
 const ACCESSORY_TITLE = /\b(?:case for|cover for|screen protector|tempered glass|replacement (?:screen|battery)|charger for|sleeve for|strap for)\b/i;
+const DEVICE_ACCESSORY_SUFFIX = /\b(?:case|cover|charger|sleeve|protector)\s*$/i;
+const NON_NEW_TITLE = /\b(?:refurbished|renewed|pre[- ]owned|second[- ]hand|open[- ]box|used)\b/i;
 const MODEL_SUFFIX = /^(?:pro|max|plus|ultra|mini|lite|fe|se|xl|power)\b/;
 
 function normalizedTitle(title) {
@@ -29,11 +31,15 @@ function matchesModel(title, model, brand) {
   return index >= 0 && !MODEL_SUFFIX.test(name.slice(index + withoutBrand.length));
 }
 
-export function isLiveModeActive() {
-  return !env.useMockData && Boolean(env.rapidApi.key);
+export function matchesShoppingModel(title, modelName, modelBrand) {
+  return matchesModel(title, normalizedTitle(modelName), modelBrand && normalizedTitle(modelBrand));
 }
 
-export async function searchProducts(query, { budget, modelName, modelBrand, preferredMinPrice, signal, limit = 15, ...opts } = {}) {
+export function isLiveModeActive() {
+  return !env.useMockData && Boolean(env.serpApi.key || env.rapidApi.key);
+}
+
+export async function searchProducts(query, { budget, modelName, modelBrand, preferredMinPrice, retailers, signal, limit = 15, ...opts } = {}) {
   if (!isLiveModeActive()) return [];
 
   const model = modelName && normalizedTitle(modelName);
@@ -52,13 +58,17 @@ export async function searchProducts(query, { budget, modelName, modelBrand, pre
         return provider.search(query, { ...providerOptions, signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
       });
       const eligible = results.flatMap((result) => {
-        if (!result.name || result.category !== opts.category || ACCESSORY_TITLE.test(result.name)) return [];
+        if (!result.name || result.category !== opts.category) return [];
+        const title = result._rawTitle ?? result.name;
+        if (ACCESSORY_TITLE.test(title) || NON_NEW_TITLE.test(title)) return [];
+        if (["smartphone", "laptop"].includes(opts.category) && DEVICE_ACCESSORY_SUFFIX.test(title)) return [];
         if (model && !matchesModel(result.name, model, brand)) return [];
         const sellers = indianOffers((result.sellers || []).filter((offer) =>
           offer.price >= (budget?.min ?? 0) &&
           offer.price <= (budget?.max ?? Infinity)
         ));
-        return sellers.length ? [{ ...result, sellers }] : [];
+        const approved = retailers ? sellers.filter(({ platform }) => retailers.includes(platform)) : sellers;
+        return approved.length ? [{ ...result, sellers: approved }] : [];
       });
       const preferred = preferredMinPrice == null
         ? eligible

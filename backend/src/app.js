@@ -25,7 +25,7 @@ export function createApp() {
   const app = express();
   const serveFrontend = env.nodeEnv === "production" && existsSync(frontendIndex);
 
-  if (process.env.RENDER === "true") {
+  if (process.env.RENDER === "true" || process.env.TRUST_PROXY === "1") {
     app.set("trust proxy", 1);
   }
 

@@ -1,6 +1,6 @@
 import { env } from "../../config/env.js";
 import { fetchRapidApiShopping } from "./rapidApiShopping.js";
-import { ProductProvider } from "./ProductProvider.js";
+import { isNewAvailableListing, ProductProvider } from "./ProductProvider.js";
 import { parseInrPrice } from "../../utils/normalization.js";
 
 function extractBrand(title) {
@@ -41,10 +41,12 @@ export class GoogleShoppingProvider extends ProductProvider {
 
     return results
       .map((r) => {
+        if (!isNewAvailableListing(r) || (r.currency && !/^(?:INR|₹)$/i.test(r.currency))) return null;
         const price = parseInrPrice(r.price);
         if (!r.title || price == null || !r.link) return null;
         return {
           name: r.title.slice(0, 120),
+          _rawTitle: r.title,
           brand: extractBrand(r.title),
           category: category || "smartphone",
           sellers: [

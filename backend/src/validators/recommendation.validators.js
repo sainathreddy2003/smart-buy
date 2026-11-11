@@ -34,7 +34,8 @@ export const createRecommendationSchema = z.object({
 
 export const chatMessageSchema = z.object({
   body: z.object({
-    recommendationId: z.string().min(1),
+    recommendationId: z.string().regex(/^[a-f\d]{24}$/i, "Invalid recommendation ID").optional(),
+    productId: z.string().regex(/^[a-f\d]{24}$/i, "Invalid product ID").optional(),
     message: z.string().trim().min(1).max(1000),
     history: z
       .array(
@@ -45,5 +46,7 @@ export const chatMessageSchema = z.object({
       )
       .max(20)
       .optional(),
+  }).refine((body) => Boolean(body.recommendationId) !== Boolean(body.productId), {
+    message: "Provide either a recommendation ID or a product ID",
   }),
 });

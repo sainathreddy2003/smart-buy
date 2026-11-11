@@ -81,13 +81,10 @@ graph TD
     Det --> Struct
     Struct --> REC[Recommendation Engine]
     REC --> PROV[Product Provider Orchestrator]
-    PROV --> Names[Search by AI-suggested model name]
-    Names --> Chain[SerpApi / Real-Time Product Search / Google Search Master MEGA / Google Search Master]
-    PROV --> Keyword[Keyword search if no named matches fit]
-    Keyword --> Chain
-    Chain --> Budget[Filter offers by budget]
-    Budget --> Quotes[Check shortlisted products on Amazon India and Flipkart]
-    Quotes --> Score[Rank by verified offers and explain]
+    PROV --> Chain[One search through SerpApi or the next available provider]
+    Chain --> Budget[Filter Amazon India and Flipkart offers by budget]
+    Budget --> Quotes[Group prices for the same configuration]
+    Quotes --> Score[Rank matching listings and explain]
     Score --> Persist[Save up to three picks with their qualifying offers]
     Score --> Price[Price Comparison + History]
     Score --> YT[YouTube138 Review Search]
@@ -201,17 +198,24 @@ npm start
 
 ---
 
-### Quick Start with Docker (Alternative)
+### Run with Docker Compose
 
-Run everything in Docker containers:
+Start Docker Desktop or Docker Engine with Compose. If `backend/.env` is
+missing, copy `backend/.env.example` and set both JWT secrets. For live shopping,
+set `USE_MOCK_DATA=false` and add your shopping API keys.
 
 ```bash
-docker compose up --build
+docker compose up --build -d --wait
 ```
 
-- **Frontend**: [http://localhost:5173](http://localhost:5173) (or [http://localhost](http://localhost))
-- **Backend API**: [http://localhost:5050](http://localhost:5050)
-- **MongoDB**: `localhost:27017`
+Open [SmartBuy](http://localhost:5173) and check the [API health endpoint](http://localhost:5173/api/health).
+Nginx serves the site and forwards `/api` to the backend. MongoDB stays inside
+Docker and persists in the `mongo_data` volume. Restarts preserve existing data.
+
+Set `SMARTBUY_PORT` if port 5173 is already in use. For a server deployment,
+place your HTTPS reverse proxy in front of the published port and set
+`SMARTBUY_PUBLIC_URL` to the site's HTTPS origin. Use `docker compose logs -f`
+to follow startup and `docker compose down` to stop the stack.
 
 ---
 
@@ -249,31 +253,21 @@ npm run dev               # http://localhost:5173
 | `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` | **Yes** | Any long random strings |
 | `GROQ_API_KEY` | No | AI requirement parsing + follow-up chat. Falls back to a deterministic parser; chat is disabled without it. |
 | `SERPAPI_KEY` | No | Primary discovery through SerpApi's Google Shopping engine. |
-| `RAPIDAPI_KEY` | For live recommendations | Amazon India and Flipkart quotes, Real-Time Product Search, both Google Search Master fallbacks, and optional YouTube review search. |
-| `FLIPKART_SEARCH_CONFIG` | For Flipkart quotes | Keyword-search GET endpoint and response mapping for the Flipkart RapidAPI subscription. |
+| `RAPIDAPI_KEY` | No | Real-Time Product Search, price history, both Google Search Master fallbacks, and optional YouTube review search. |
 | `USE_MOCK_DATA` | No (default `true`) | Set `false` to enable live recommendations. |
 | `YOUTUBE_API_KEY` | No | Alternative to RapidAPI for review search, if you have an official Google YouTube Data API v3 key. |
 
-Live recommendations require `USE_MOCK_DATA=false` and `RAPIDAPI_KEY`.
+Live recommendations require `USE_MOCK_DATA=false` and at least one of `SERPAPI_KEY` or `RAPIDAPI_KEY`.
 Discovery starts with SerpApi Google Shopping for India. If a provider is
 unavailable or over quota, the order is Real-Time Product Search, Google
 Search Master MEGA, then standard Google Search Master. A successful empty
 result stays with the responding provider.
 
-SmartBuy checks Amazon India and Flipkart in parallel for up to three shortlisted
-products. It displays in-budget INR quotes from the retailer APIs and leaves a
-store's price blank when it cannot verify a matching offer. The chart tracks
-the lowest verified price at each recorded check. For listings discovered
-through Real-Time Product Search, the chart can fill sparse history with dated
-India offers from the same provider when they are available.
-
-Set `FLIPKART_SEARCH_CONFIG` to a JSON object using the values shown in the
-Flipkart RapidAPI playground. `url` is the HTTPS search endpoint, including
-any fixed query parameters. `queryParam` is the keyword parameter name.
-`results` is the dot-separated path to the result array, or omit it for a
-top-level array. `name`, `price`, and `link` are field paths within each result.
-`currency` and `availability` are optional field paths. Keep the API key in
-`RAPIDAPI_KEY`.
+Each recommendation uses the prices and seller links in a single shopping
+response. SmartBuy shows Amazon India and Flipkart prices when the response
+includes both for the same configuration and within budget. If a seller's offer
+is missing, its price stays blank. Opening a product page loads the chart on
+demand from saved observations and matching Real-Time Product Search history.
 
 For RapidAPI shopping, the app reads the reported request allowance and stops
 issuing new calls to a provider when its balance reaches zero. The balance is
@@ -330,7 +324,14 @@ you attach a custom domain, set `CLIENT_URL` to its full HTTPS origin.
 | GET | `/api/history` | required | Signed-in user's search history |
 | POST | `/api/history` | required | Manually log a search |
 | GET/POST/DELETE | `/api/users/favorites` | required | Saved products |
-| POST | `/api/chat` | — | Follow-up chat about a recommendation (requires `GROQ_API_KEY`) |
+| POST | `/api/chat` | — | Follow-up chat about a product or recommendation (requires `GROQ_API_KEY`) |
+
+Chat accepts `message`, optional `history`, and exactly one of `productId` or
+`recommendationId`. The product-page advisor retains the selected product;
+after a shopping search, follow-up questions refer to that shortlist. Use
+New Session or choose a category to start another search. Chat requests have
+a 15-second provider timeout and report configuration, usage-limit, or
+temporary provider errors separately.
 
 ## Demoing this in an interview
 

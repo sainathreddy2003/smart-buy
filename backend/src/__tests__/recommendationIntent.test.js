@@ -10,6 +10,7 @@ import { isLiveModeActive, searchProducts } from "../services/productSearch.serv
 import { parseRequirementDeterministically } from "../utils/deterministicParser.js";
 
 env.groq.apiKey ??= "test";
+env.groq.liveSearch = false;
 const { generateRecommendation } = await import("../services/recommendation.service.js");
 
 const offer = (title, price, suffix = "B000000001", platform = "amazon") => ({

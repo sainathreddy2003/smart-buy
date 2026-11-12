@@ -67,8 +67,20 @@ test("a model constraint overrides broad text instead of sending it to a provide
   assert.equal(fetch.mock.callCount(), 1);
 });
 
-test("unrelated results stop without broadening the search or asking more providers", async (t) => {
+test("a separate Groq manufacturer is included in the canonical product query", async (t) => {
   setup(t);
+  const fetch = t.mock.method(globalThis, "fetch", async (url) => {
+    assert.equal(url.searchParams.get("q"), "Apple MacBook Air 13 M5");
+    return Response.json({ shopping_results: [{ title: "Apple MacBook Air 13.6-inch Laptop with M5 chip", price: "₹1,39,999", direct_link: "https://www.amazon.in/dp/B000000001" }] });
+  });
+  const products = await searchSuggestedProduct({ name: "MacBook Air 13 (M5)", brand: "Apple" }, { category: "laptop", budget: { max: 200000 } });
+  assert.equal(products.length, 1);
+  assert.equal(fetch.mock.callCount(), 1);
+});
+
+test("a single configured provider cannot substitute an unrelated model", async (t) => {
+  setup(t);
+  env.rapidApi.key = null;
   const fetch = t.mock.method(globalThis, "fetch", async (url) => {
     assert.equal(url.hostname, hosts[0]);
     assert.equal(url.searchParams.get("q"), model.name);
@@ -80,6 +92,7 @@ test("unrelated results stop without broadening the search or asking more provid
 
 test("simultaneous model lookups share a fetch while independently applying each budget", async (t) => {
   setup(t);
+  env.rapidApi.key = null;
   const fetch = t.mock.method(globalThis, "fetch", async (url) => {
     await new Promise((resolve) => setImmediate(resolve));
     return responseFor(url);

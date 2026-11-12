@@ -1,13 +1,16 @@
 import { env } from "../../config/env.js";
 import { parseInrPrice } from "../../utils/normalization.js";
 import { fetchRapidApiShopping } from "./rapidApiShopping.js";
+import { isNewAvailableListing } from "./ProductProvider.js";
+import { indianListingKey } from "../../utils/indianRetailers.js";
 
 function field(object, path) {
   return path?.split(".").reduce((value, key) => Object.hasOwn(value ?? {}, key) ? value[key] : undefined, object);
 }
 
-export async function searchFlipkartOffers(query, { signal } = {}) {
+async function fetchFlipkartListings(query, { signal } = {}) {
   if (!env.rapidApi.flipkartSearchConfig) return [];
+  if (!env.rapidApi.key) throw new Error("Flipkart search requires RAPIDAPI_KEY");
 
   let config;
   try {
@@ -34,13 +37,43 @@ export async function searchFlipkartOffers(query, { signal } = {}) {
     const price = parseInrPrice(field(row, config.price));
     const link = URL.parse(field(row, config.link) ?? "");
     const currency = field(row, config.currency);
-    const availability = field(row, config.availability);
+    const availability = config.availability ? field(row, config.availability)
+      : row.product_availability ?? row.availability ?? row.in_stock;
+    const condition = config.condition ? field(row, config.condition)
+      : row.product_condition ?? row.second_hand_condition ?? row.condition;
     if (typeof name !== "string" || !name.trim() || price == null || !link
       || link.protocol !== "https:" || link.username || link.password || link.port
       || !/^(?:(?:www|m)\.)?flipkart\.com$/.test(link.hostname) || !/\/p\/[^/]+/.test(link.pathname)
       || (currency && !/^(?:INR|₹)$/i.test(currency))
-      || availability === false || /^(?:false|0|out[ _-]of[ _-]stock|unavailable|sold[ _-]out)$/i.test(availability ?? "")) return [];
+      || !isNewAvailableListing({ condition, availability })
+      || /(?:^(?:false|0)$|out[ _-]*of[ _-]*stock|unavailable|sold[ _-]*out|not[ _-]*available)/i.test(availability ?? "")) return [];
 
-    return [{ name: name.trim(), platform: "Flipkart", price, currency: "INR", url: link.href, availability: true }];
+    const seller = { platform: "Flipkart", price, currency: "INR", url: link.href,
+      ...(availability != null && { availability: true }) };
+    const rating = config.rating ? Number(field(row, config.rating)) : NaN;
+    const image = field(row, config.image);
+    return [{
+      name: name.trim(), seller, condition,
+      image: typeof image === "string" ? image : undefined,
+      rating: Number.isFinite(rating) && rating > 0 && rating <= 5 ? rating : undefined,
+      sourceProductId: indianListingKey(seller),
+    }];
   });
+}
+
+/** Preserve the existing retailer-quote return shape. */
+export async function searchFlipkartOffers(query, options = {}) {
+  return (await fetchFlipkartListings(query, options)).map(({ name, seller }) => ({ name, ...seller, availability: true }));
+}
+
+/** Map only metadata whose paths are configured for this subscribed API. */
+export async function searchFlipkartProducts(query, { category, signal, limit = 15 } = {}) {
+  const listings = await fetchFlipkartListings(query, { signal });
+  return listings.slice(0, limit).map(({ name, seller, condition, image, rating, sourceProductId }) => ({
+    name: name.slice(0, 120), _rawTitle: name, brand: name.split(/\s+/)[0], category,
+    sellers: [seller], source: "rapidapi", sourceProductId,
+    ...(condition != null && { condition }),
+    ...(image && { image }),
+    ...(rating != null && { rating }),
+  }));
 }

@@ -10,6 +10,7 @@ import { searchProducts } from "../services/productSearch.service.js";
 import { parseRequirementDeterministically } from "../utils/deterministicParser.js";
 
 env.groq.apiKey ??= "test";
+env.groq.liveSearch = false;
 const { generateRecommendation } = await import("../services/recommendation.service.js");
 
 const serpHost = "serpapi.com";
@@ -97,10 +98,10 @@ test("SerpApi searches India first and keeps eligible offers beyond the first re
   assert.equal(product.sellers[0].price, 50000);
 });
 
-test("a successful SerpApi search filters unsuitable offers without using Google Search Master", async (t) => {
+test("a SerpApi-only search filters unsuitable offers without substituting another model", async (t) => {
   env.useMockData = false;
   env.serpApi.key = "test";
-  env.rapidApi.key = "test";
+  env.rapidApi.key = null;
   const fetch = t.mock.method(globalThis, "fetch", async (url) => {
     assert.equal(url.hostname, serpHost);
     assert.equal(url.searchParams.get("gl"), "in");
@@ -153,7 +154,7 @@ test("a slow primary provider is aborted and an eligible fallback can still win"
 test("model searches compare camera-phone prices without separate retailer calls", async (t) => {
   env.useMockData = false;
   env.serpApi.key = "test";
-  env.rapidApi.key = "test";
+  env.rapidApi.key = null;
   const previousConfig = env.rapidApi.flipkartSearchConfig;
   env.rapidApi.flipkartSearchConfig = JSON.stringify({
     url: `https://${flipkartHost}/fixture`, queryParam: "term", results: "data.items",
@@ -248,7 +249,7 @@ test("a value-only camera shortlist returns no recommendation instead of a gener
 test("laptop recommendations prefer the requested price tier and explain cheaper fallbacks", async (t) => {
   env.useMockData = false;
   env.serpApi.key = "test";
-  env.rapidApi.key = "test";
+  env.rapidApi.key = null;
   t.mock.method(Groq.Chat.Completions.prototype, "create", async () => ({
     choices: [{ message: { content: '{"products":[{"name":"Example Everyday Laptop","brand":"Example"},{"name":"Example Laptop Core Ultra 7","brand":"Example"}]}' } }],
   }));

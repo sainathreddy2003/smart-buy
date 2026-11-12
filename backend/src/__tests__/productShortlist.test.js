@@ -5,6 +5,7 @@ import { env } from "../config/env.js";
 import { parseRequirementDeterministically } from "../utils/deterministicParser.js";
 
 env.groq.apiKey ??= "test";
+env.groq.liveSearch = false;
 const { suggestProductNames } = await import("../services/ai.service.js");
 
 function groqReply(products) {

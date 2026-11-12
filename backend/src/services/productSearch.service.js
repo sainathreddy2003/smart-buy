@@ -2,19 +2,25 @@ import { ApiError } from "../utils/ApiError.js";
 import { env } from "../config/env.js";
 import { indianOffers } from "../utils/indianRetailers.js";
 import { isWholeProductListing } from "../utils/productListing.js";
+import { matchMacbookModel } from "../utils/macbookModel.js";
 import { GoogleShoppingProvider } from "./providers/GoogleShoppingProvider.js";
 import { RapidApiProductProvider } from "./providers/RapidApiProductProvider.js";
 import { SerpApiProvider } from "./providers/SerpApiProvider.js";
+import { AmazonProductProvider } from "./providers/AmazonProductProvider.js";
+import { FlipkartProductProvider } from "./providers/FlipkartProductProvider.js";
 import { wrap } from "./cache.service.js";
 
 const serpApiProvider = new SerpApiProvider();
 const rapidApiProvider = new RapidApiProductProvider();
 const googleMegaProvider = new GoogleShoppingProvider({ mega: true });
 const googleShoppingProvider = new GoogleShoppingProvider();
+const amazonProvider = new AmazonProductProvider();
+const flipkartProvider = new FlipkartProductProvider();
 
-const LIVE_PROVIDERS = [serpApiProvider, rapidApiProvider, googleMegaProvider, googleShoppingProvider];
+const LIVE_PROVIDERS = [serpApiProvider, rapidApiProvider, googleMegaProvider, googleShoppingProvider, amazonProvider, flipkartProvider];
 const PROVIDER_TIMEOUT_MS = 3200;
 const PRODUCT_SEARCH_TIMEOUT_MS = 5000;
+const RETAILER_SEARCH_TIMEOUT_MS = 6500;
 const SEARCH_CACHE_TTL_MS = 5 * 60 * 1000;
 const NON_NEW_TITLE = /\b(?:refurbished|renewed|pre[- ]owned|second[- ]hand|open[- ]box|used)\b/i;
 const MODEL_SUFFIX = /^(?:pro|max|plus|ultra|mini|lite|fe|se|xl|power|fold|flip|fusion|neo|edge)\b/;
@@ -59,6 +65,8 @@ function matchesModel(title, model, brand) {
 }
 
 export function matchesShoppingModel(title, modelName, modelBrand) {
+  const macbookMatch = matchMacbookModel(title, modelName, modelBrand);
+  if (macbookMatch !== null) return macbookMatch;
   return matchesModel(title, normalizedTitle(modelName), modelBrand && normalizedTitle(modelBrand));
 }
 
@@ -88,8 +96,11 @@ export async function searchSuggestedProduct(model, options = {}) {
     || typeof model?.brand !== "string" || !model.brand.trim()) {
     throw ApiError.badRequest("A specific suggested product model and brand are required.");
   }
-  return searchProducts(model.name.trim(), {
-    ...options, modelName: model.name.trim(), modelBrand: model.brand.trim(),
+  const brand = model.brand.trim();
+  const name = model.name.replace(/[()]/g, " ").replace(/\s+/g, " ").trim();
+  const query = name.toLowerCase().startsWith(`${brand.toLowerCase()} `) ? name : `${brand} ${name}`;
+  return searchProducts(query, {
+    ...options, modelName: query, modelBrand: brand,
   });
 }
 
@@ -97,27 +108,32 @@ export async function searchProducts(query, { budget, modelName, modelBrand, pre
   if (!isLiveModeActive()) return [];
 
   const model = modelName && normalizedTitle(modelName);
-  const brand = modelBrand && normalizedTitle(modelBrand);
   const searchQuery = modelName ? modelName.trim() : query;
   // Look beyond the first few listings before filtering by budget and seller.
   const providerOptions = { ...opts, exactModel: Boolean(modelName), limit: Math.max(limit, 15) };
+  let completed = false;
   for (const provider of LIVE_PROVIDERS) {
     if (signal?.aborted) break;
+    // Native retailer searches are only a fallback for a specific Groq model.
+    if ((provider === amazonProvider || provider === flipkartProvider) && !model) continue;
+    if (provider === flipkartProvider && !env.rapidApi.flipkartSearchConfig) continue;
     const key = provider === serpApiProvider ? env.serpApi.key : env.rapidApi.key;
     if (!key) continue;
     const providerName = provider.host ?? provider.constructor.name;
     const cacheKey = `product-search:${providerName}:${searchQuery}:${JSON.stringify(providerOptions)}`;
     try {
       const request = wrap(cacheKey, SEARCH_CACHE_TTL_MS, () => {
-        const timeout = AbortSignal.timeout(provider === rapidApiProvider ? PRODUCT_SEARCH_TIMEOUT_MS : PROVIDER_TIMEOUT_MS);
+        const timeout = AbortSignal.timeout(provider === rapidApiProvider ? PRODUCT_SEARCH_TIMEOUT_MS
+          : provider === amazonProvider || provider === flipkartProvider ? RETAILER_SEARCH_TIMEOUT_MS : PROVIDER_TIMEOUT_MS);
         return provider.search(searchQuery, { ...providerOptions, signal: timeout });
       });
       const results = await waitForSharedSearch(request, signal);
+      completed = true;
       const eligible = results.flatMap((result) => {
         if (!result.name || result.category !== opts.category) return [];
         const title = result._rawTitle ?? result.name;
         if (!isWholeProductListing(title, opts.category) || NON_NEW_TITLE.test(title)) return [];
-        if (model && !matchesModel(title, model, brand)) return [];
+        if (model && !matchesShoppingModel(title, modelName, modelBrand)) return [];
         const sellers = indianOffers((result.sellers || []).filter((offer) =>
           offer.price >= (budget?.min ?? 0) &&
           offer.price <= (budget?.max ?? Infinity)
@@ -128,12 +144,14 @@ export async function searchProducts(query, { budget, modelName, modelBrand, pre
       const preferred = preferredMinPrice == null
         ? eligible
         : eligible.filter((result) => result.sellers.every((offer) => offer.price >= preferredMinPrice));
-      return (preferred.length ? preferred : eligible).slice(0, limit);
+      if (eligible.length) return (preferred.length ? preferred : eligible).slice(0, limit);
+      console.log(`[SEARCH] ${providerName}: no eligible model offers, trying the next source for the same model`);
     } catch (err) {
       if (signal?.aborted) break;
       console.warn(`[SEARCH] ${providerName} failed, trying next provider: ${err.message}`);
     }
   }
 
+  if (completed) return [];
   throw new ApiError(503, "Live shopping search is temporarily unavailable. Please try again later.");
 }

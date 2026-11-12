@@ -10,6 +10,7 @@ import { searchSuggestedProduct } from "../services/productSearch.service.js";
 import { parseRequirementDeterministically } from "../utils/deterministicParser.js";
 
 env.groq.apiKey ??= "test";
+env.groq.liveSearch = false;
 const { generateRecommendation } = await import("../services/recommendation.service.js");
 
 const iphone15 = { name: "Apple iPhone 15 Plus", brand: "Apple" };
@@ -25,7 +26,7 @@ function fixture(t, listings) {
   const original = { mock: env.useMockData, serp: env.serpApi.key, rapid: env.rapidApi.key };
   env.useMockData = false;
   env.serpApi.key = "test";
-  env.rapidApi.key = "test";
+  env.rapidApi.key = null;
   clear();
   t.after(() => {
     env.useMockData = original.mock;
@@ -34,7 +35,7 @@ function fixture(t, listings) {
     clear();
   });
   return t.mock.method(globalThis, "fetch", async (url) => {
-    assert.equal(url.hostname, "serpapi.com", "An accessory-only result must not trigger another discovery provider");
+    assert.equal(url.hostname, "serpapi.com", "Only SerpApi is configured in this validation fixture");
     return Response.json({ shopping_results: listings });
   });
 }

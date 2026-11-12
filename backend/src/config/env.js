@@ -28,6 +28,8 @@ export const env = {
     // Optional — the app must run (with deterministic fallbacks) when unset.
     apiKey: process.env.GROQ_API_KEY || null,
     model: process.env.GROQ_MODEL || "openai/gpt-oss-120b",
+    // Live research is used only when curating product models.
+    liveSearch: process.env.GROQ_LIVE_SEARCH !== "false",
   },
   // RapidAPI powers retailer quotes, discovery fallbacks, and optional YouTube138.
   rapidApi: {

@@ -57,7 +57,7 @@ test("a requested MacBook screen size remains mandatory", () => {
   assert.equal(matchesShoppingModel("MacBook Air 13-inch M3 16GB", "Apple MacBook Air 13 M3", "Apple"), true);
   assert.equal(matchesShoppingModel("MacBook Air 13.6-inch M3 16GB", "Apple MacBook Air 13.6 M3", "Apple"), true);
   assert.equal(matchesShoppingModel("MacBook Air 15-inch M3 16GB", "Apple MacBook Air 13 M3", "Apple"), false);
-  assert.equal(matchesShoppingModel("MacBook Air 13.6-inch M3 16GB", "Apple MacBook Air 13 M3", "Apple"), false);
+  assert.equal(matchesShoppingModel("MacBook Air 13.6-inch M3 16GB", "Apple MacBook Air 13 M3", "Apple"), true);
   assert.equal(matchesShoppingModel("MacBook Air M3 16GB", "Apple MacBook Air 13 M3", "Apple"), false);
 });
 

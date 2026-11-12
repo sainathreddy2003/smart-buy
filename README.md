@@ -156,19 +156,35 @@ The complete shopping message is the primary input; extracted fields support
 it rather than replacing it. Prompts support up to 4,000 characters, with an
 explicit error for oversized messages instead of silent clipping. Requested
 families such as iPhone or MacBook remain constraints on Groq's shortlist.
+Groq's built-in browser research is enabled for this step so model selection
+can use current product evidence instead of relying only on training data.
+One browser-enabled completion returns researched model names. The server
+parses and validates the answer without a second Groq
+formatting call. This avoids tool-format conflicts and reduces free-tier token
+usage. Identical concurrent or repeated requests share a five-minute shortlist
+cache; displayed retailer prices still come from the shopping providers.
+It uses the existing Groq key and can add Groq tool usage charges. Set
+`GROQ_LIVE_SEARCH=false` to explicitly opt out of live research. Requirement
+extraction and follow-up chat do not run browser research.
+Live research requires a supported GPT-OSS model; see the
+[Groq browser-search documentation](https://console.groq.com/docs/tool-use/built-in-tools/browser-search).
 
 **3. Exact-model live searches.** The engine searches each shortlisted model
 individually, with up to three lookups running in parallel. Discovery starts
 with SerpApi Google Shopping for India. On provider failure or quota exhaustion, it tries
 Real-Time Product Search, Google Search Master MEGA, then standard Google
-Search Master. Those retries can consume additional calls. Repeated queries
+Search Master. If those sources cannot supply an eligible offer, native Amazon
+India search and the configured Flipkart endpoint are final model-search
+fallbacks. A provider returning only unrelated, accessory, unapproved-seller or
+over-budget results also advances to the next source for the same model.
+Those retries can consume additional calls. Repeated queries
 can use the five-minute cache.
 
-Recommendation searches send only the Groq model name to every provider,
+Recommendation searches send the canonical manufacturer and model supplied by Groq to every provider,
 without appending category, budget or use-case keywords. Google Search Master
 autocorrection is disabled for these lookups. Provider failures can switch
-providers for that same model; an empty or unrelated response does not trigger
-a broader discovery search. Simultaneous identical provider queries share one
+providers for that same model; an empty or unrelated response also advances
+the provider chain without changing the model query. Simultaneous identical provider queries share one
 pending request as well as the completed-result cache.
 
 **4. Verification and selection.** Returned listings must match a shortlisted
@@ -260,23 +276,30 @@ npm run dev               # http://localhost:5173
 | `MONGO_URI` | **Yes** | Database connection |
 | `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` | **Yes** | Any long random strings |
 | `GROQ_API_KEY` | For live recommendations | Model shortlisting, AI requirement parsing and follow-up chat. Requirement extraction can fall back to the deterministic parser; shortlisting and chat require the key. |
+| `GROQ_LIVE_SEARCH` | No (default `true`) | Groq browser research for current shortlist models. Uses Groq tool quota/billing; `false` explicitly uses model-only shortlisting. |
 | `SERPAPI_KEY` | No | Primary discovery through SerpApi's Google Shopping engine. |
-| `RAPIDAPI_KEY` | No | Real-Time Product Search, price history, both Google Search Master fallbacks, and optional YouTube review search. |
+| `RAPIDAPI_KEY` | No | Real-Time Product Search, price history, Google Search Master fallbacks, native Amazon India search, configured Flipkart search, and optional YouTube review search. |
 | `USE_MOCK_DATA` | No (default `true`) | Set `false` to enable live recommendations. |
 | `YOUTUBE_API_KEY` | No | Alternative to RapidAPI for review search, if you have an official Google YouTube Data API v3 key. |
 
 Live recommendations require `USE_MOCK_DATA=false`, `GROQ_API_KEY`, and at least one of `SERPAPI_KEY` or `RAPIDAPI_KEY`.
 Discovery starts with SerpApi Google Shopping for India. If a provider is
-unavailable or over quota, the order is Real-Time Product Search, Google
-Search Master MEGA, then standard Google Search Master. A successful empty
-result stays with the responding provider.
+unavailable, over quota, or returns no eligible exact-model offer, the order is
+Real-Time Product Search, Google Search Master MEGA, standard Google Search
+Master, then native Amazon India and configured Flipkart model search.
+All sources search the same Groq-selected model; no generic discovery query
+is substituted. The first source with an eligible offer stops the chain.
+MacBook matching checks the chip, requested configuration and primary product
+independently of retailer wording. It recognizes Apple's marketing-size aliases
+such as 13-inch versus the 13.6-inch panel, as documented in
+[Apple's specifications](https://support.apple.com/en-us/126320).
 
 Groq first proposes up to three suitable models. Each model gets one shopping
 search, with no separate retailer quote calls. SmartBuy shows Amazon India
 and Flipkart prices when that model's response includes both for the same
 configuration and within budget. If a seller's offer is missing, its price
 stays unverified. A fresh recommendation can therefore use up to three
-shopping calls when each primary-provider lookup succeeds; provider failures
+shopping calls when each primary-provider lookup succeeds; failures or unusable results
 can add fallback calls, and repeated queries can use the five-minute cache.
 Opening a product page loads the chart on demand from saved observations and
 matching Real-Time Product Search history.

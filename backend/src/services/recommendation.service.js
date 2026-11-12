@@ -8,7 +8,7 @@ import { suggestProductNames } from "./ai.service.js";
 import { indianOffers } from "../utils/indianRetailers.js";
 import { parseRAM, parseStorage, tierFromCPU, tierFromGPU } from "../utils/normalization.js";
 
-const SHOPPING_SEARCH_TIMEOUT_MS = 15000;
+const SHOPPING_SEARCH_TIMEOUT_MS = 22000;
 const RECOMMENDATION_RETAILERS = ["Amazon India", "Flipkart"];
 const PREFERRED_DEVICE_BUDGET_RATIO = 0.65;
 const LOW_COST_REQUEST = /\b(?:cheapest|cheap|affordable|budget[- ]friendly|best value|lower[- ]cost|cheaper|spend less|lowest price)\b/i;

@@ -1,4 +1,4 @@
-// Realistic sample catalog for SmartBuy AI's seed script — INR pricing,
+// Realistic sample catalog for WiseBuy's seed script — INR pricing,
 // multiple sellers per product (so price comparison has something to show),
 // and raw human-readable specs that get run through utils/normalization.js
 // at seed time (see seed.js) rather than hand-duplicated as numbers here.

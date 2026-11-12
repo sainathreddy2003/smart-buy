@@ -169,7 +169,7 @@ export async function completeChat({ system, history, temperature = 0.5 }) {
   return reply;
 }
 
-const REQUIREMENT_SYSTEM_PROMPT = `You are SmartBuy AI's requirement analyzer.
+const REQUIREMENT_SYSTEM_PROMPT = `You are WiseBuy's requirement analyzer.
 Your ONLY job is to turn a shopper's free-text request into structured search
 criteria. You do NOT know anything about actual products, prices, or specs —
 never invent a product name, price, or spec. You are interpreting what the
@@ -255,7 +255,7 @@ export async function analyzeRequirement(text) {
   return parseRequirementDeterministically(text);
 }
 
-const PRODUCT_SUGGESTION_SYSTEM_PROMPT = `You are SmartBuy AI's product shortlisting step, BEFORE live shopping search.
+const PRODUCT_SUGGESTION_SYSTEM_PROMPT = `You are WiseBuy's product shortlisting step, BEFORE live shopping search.
 The originalQuery field contains the shopper's COMPLETE ORIGINAL MESSAGE,
 verbatim. Read that whole message before selecting any model. It is the PRIMARY
 AUTHORITY for shopping intent, requested brand or product family, intended use,

@@ -33,7 +33,7 @@ export default function Signup() {
   return (
     <AuthShell
       title="Create your account"
-      subtitle="Join SmartBuy AI to synchronize your recommendations across devices and unlock customized product tracking."
+      subtitle="Join WiseBuy to synchronize your recommendations across devices and unlock customized product tracking."
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <Field

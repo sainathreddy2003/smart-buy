@@ -59,7 +59,7 @@ export function createApp() {
   }
 
   app.get("/api/health", (req, res) => {
-    res.json({ success: true, service: "smartbuy-ai-api", status: "ok" });
+    res.json({ success: true, service: "wisebuy-api", status: "ok" });
   });
 
   app.use("/api/auth", authRoutes);

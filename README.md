@@ -1,4 +1,4 @@
-# SmartBuy AI
+# WiseBuy
 
 ## Problem
 
@@ -9,7 +9,7 @@ deliver that. Spec sheets don't translate intent into a decision.
 
 ## Solution
 
-SmartBuy AI extracts category, budget and intended use from a shopping request,
+WiseBuy extracts category, budget and intended use from a shopping request,
 then asks Groq to shortlist suitable product models. It searches those models
 individually and shows only matching listings with verified
 Indian retailer offers inside the budget. Groq chooses the models; shopping
@@ -232,7 +232,7 @@ set `USE_MOCK_DATA=false` and add `GROQ_API_KEY` plus your shopping API keys.
 docker compose up --build -d --wait
 ```
 
-Open [SmartBuy](http://localhost:5173) and check the [API health endpoint](http://localhost:5173/api/health).
+Open [WiseBuy](http://localhost:5173) and check the [API health endpoint](http://localhost:5173/api/health).
 Nginx serves the site and forwards `/api` to the backend. MongoDB stays inside
 Docker and persists in the `mongo_data` volume. Restarts preserve existing data.
 
@@ -295,7 +295,7 @@ such as 13-inch versus the 13.6-inch panel, as documented in
 [Apple's specifications](https://support.apple.com/en-us/126320).
 
 Groq first proposes up to three suitable models. Each model gets one shopping
-search, with no separate retailer quote calls. SmartBuy shows Amazon India
+search, with no separate retailer quote calls. WiseBuy shows Amazon India
 and Flipkart prices when that model's response includes both for the same
 configuration and within budget. If a seller's offer is missing, its price
 stays unverified. A fresh recommendation can therefore use up to three

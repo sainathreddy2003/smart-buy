@@ -24,7 +24,7 @@ export function StepUseCase({ category, value, onSelect }) {
         What is your primary use case?
       </h2>
       <p className="mt-2 text-sm text-[var(--color-text-muted)]">
-        SmartBuy AI recalibrates specification weights based on your everyday workload.
+        WiseBuy recalibrates specification weights based on your everyday workload.
       </p>
 
       <div className="mt-8 flex flex-wrap gap-2.5">

@@ -53,7 +53,7 @@ export default function History() {
       {history.length === 0 ? (
         <div className="mt-10 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-12 text-center text-xs text-[var(--color-text-muted)] shadow-[0_8px_24px_rgba(0,0,0,0.4)]">
           <Clock size={28} className="mx-auto mb-3 text-[var(--color-text-faint)]" />
-          No recent searches logged — ask SmartBuy AI for a product recommendation to get started.
+          No recent searches logged — ask WiseBuy for a product recommendation to get started.
         </div>
       ) : (
         <div className="mt-8 space-y-2.5">

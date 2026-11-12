@@ -166,7 +166,7 @@ test("unavailable suggested models are omitted without fabricating a price or su
   assert.deepEqual(result.picks.map(({ product }) => product.name), ["Example Available 256GB"]);
   assert.equal(save.mock.callCount(), 1);
   assert.equal(fetch.mock.callCount(), 3);
-  assert.match(result.summary, /SmartBuy suggested this product/);
+  assert.match(result.summary, /WiseBuy suggested this product/);
   assert.match(result.summary, /verified for 1 of 3 suggested models/);
   assert.match(result.summary, /other models had no matching verified offer/);
   assert.doesNotMatch(result.summary, /Groq|Research identified/);
@@ -267,9 +267,9 @@ for (const [query, names, cameraFit] of [
     assert.deepEqual(result.picks.map(({ product }) => product.bestPrice), [169999, 119999, 99999]);
     assert.deepEqual(result.picks.map(({ rank }) => rank), [1, 2, 3]);
     assert.equal(result.shortlistedModels.length, 3);
-    assert.match(result.summary, /SmartBuy suggested these 3 products/);
+    assert.match(result.summary, /WiseBuy suggested these 3 products/);
     assert.doesNotMatch(result.summary, /Groq|temporarily unavailable|no matching|target is 3/);
-    assert.ok(result.picks.every(({ reasoning }) => reasoning.startsWith("Suggested by SmartBuy")));
+    assert.ok(result.picks.every(({ reasoning }) => reasoning.startsWith("Suggested by WiseBuy")));
     assert.equal(fetch.mock.callCount(), 3, "Each model uses its search response for prices without extra quote calls");
     assert.equal(save.mock.callCount(), 3);
   });

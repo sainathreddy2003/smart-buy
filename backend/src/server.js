@@ -7,7 +7,7 @@ async function start() {
   const app = createApp();
 
   app.listen(env.port, () => {
-    console.log(`[server] SmartBuy AI API listening on http://localhost:${env.port}`);
+    console.log(`[server] WiseBuy API listening on http://localhost:${env.port}`);
   });
 }
 

@@ -33,15 +33,21 @@ test("saved validation uses the full provider title rather than a shortened disp
   assert.deepEqual(result.picks.map(({ product }) => product.name), ["Apple iPhone 15 Plus 128GB Blue"]);
 });
 
-test("saved summaries and pick explanations use SmartBuy branding without changing shopper data", () => {
-  const originalQuery = "Groq suggested a phone; compare it under 1 lakh";
-  const result = serializeRecommendation({ toObject: () => ({
-    originalQuery,
-    preferences: { category: "smartphone", budget: { max: 100000 } },
-    picks: [{ ...pick("Apple iPhone 15 Plus 128GB", 54999), reasoning: "Shortlisted by Groq for your stated needs • Fits your budget" }],
-    summary: "Groq shortlisted these products. Prices are from live shopping listings.",
-  }) });
-  assert.equal(result.summary, "SmartBuy suggested these products. Prices are from live shopping listings.");
-  assert.equal(result.picks[0].reasoning, "Suggested by SmartBuy for your stated needs • Fits your budget");
-  assert.equal(result.originalQuery, originalQuery);
+test("saved summaries and pick explanations use WiseBuy branding without changing shopper data", () => {
+  const originalQuery = "SmartBuy suggested a phone; compare it under 1 lakh";
+  for (const [summary, reasoning] of [
+    ["Groq shortlisted these products.", "Shortlisted by Groq for your stated needs"],
+    ["SmartBuy suggested these products.", "Suggested by SmartBuy for your stated needs"],
+    ["SmartBuy AI suggested these products.", "Suggested by SmartBuy AI for your stated needs"],
+  ]) {
+    const result = serializeRecommendation({ toObject: () => ({
+      originalQuery,
+      preferences: { category: "smartphone", budget: { max: 100000 } },
+      picks: [{ ...pick("Apple iPhone 15 Plus 128GB", 54999), reasoning: `${reasoning} • Fits your budget` }],
+      summary: `${summary} Prices are from live shopping listings.`,
+    }) });
+    assert.equal(result.summary, "WiseBuy suggested these products. Prices are from live shopping listings.");
+    assert.equal(result.picks[0].reasoning, "Suggested by WiseBuy for your stated needs • Fits your budget");
+    assert.equal(result.originalQuery, originalQuery);
+  }
 });

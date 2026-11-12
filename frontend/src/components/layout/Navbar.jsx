@@ -6,7 +6,7 @@ import { useCompareStore } from "../../store/compareStore";
 import { api } from "../../lib/api";
 
 export function Brand() {
-  return <Link to="/" className="shop-brand" aria-label="SmartBuy home">smartbuy<span>.</span></Link>;
+  return <Link to="/" className="shop-brand" aria-label="WiseBuy home">wisebuy<span>.</span></Link>;
 }
 
 export function Navbar() {

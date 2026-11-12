@@ -4,7 +4,7 @@ import { ShoppingEdits } from "../components/landing/ShoppingEdits";
 export default function Explore() {
   return (
     <section className="shop-wrap shop-section shop-explore">
-      <p className="shop-kicker">SmartBuy Explore</p>
+      <p className="shop-kicker">WiseBuy Explore</p>
       <h1>Shop by what you do.</h1>
       <p>Choose a use case, add your budget, and find live listings that fit.</p>
       <ShoppingEdits />

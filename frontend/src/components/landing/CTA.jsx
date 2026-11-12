@@ -24,7 +24,7 @@ export function CTA() {
           </h2>
 
           <p className="mx-auto mt-6 max-w-lg text-base sm:text-lg leading-relaxed text-[#A39A8C]">
-            It takes less time than reading one more review. Let SmartBuy AI evaluate the hardware, compare live sellers, and shortlist your top picks.
+            It takes less time than reading one more review. Let WiseBuy evaluate the hardware, compare live sellers, and shortlist your top picks.
           </p>
 
           <div className="mt-10 flex flex-wrap items-center justify-center gap-4">

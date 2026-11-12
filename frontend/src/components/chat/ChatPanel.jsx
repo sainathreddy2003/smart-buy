@@ -10,7 +10,7 @@ export function ChatPanel({ recommendationId }) {
   const [messages, setMessages] = useState([
     {
       role: "assistant",
-      content: "Hey! I'm SmartBuy AI. Ask me anything about your shortlisted recommendations — spec differences, battery endurance, or which one offers maximum value for your exact budget.",
+      content: "Hey! I'm WiseBuy. Ask me anything about your shortlisted recommendations — spec differences, battery endurance, or which one offers maximum value for your exact budget.",
     },
   ]);
   const [input, setInput] = useState("");

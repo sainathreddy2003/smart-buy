@@ -1,7 +1,7 @@
 {
-  "name": "smartbuy-ai",
+  "name": "wisebuy",
   "version": "1.0.0",
-  "description": "SmartBuy AI — Intent-aware AI-powered technology shopping assistant",
+  "description": "WiseBuy — Intent-aware AI-powered technology shopping assistant",
   "type": "module",
   "scripts": {
     "start": "node start.js",

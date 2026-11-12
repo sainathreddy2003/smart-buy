@@ -450,7 +450,7 @@ export async function generateRecommendation(rawBody, userId, originalQuery) {
   console.log(`[RECOMMENDER] ${top.length} Groq picks with verified live shopping prices`);
 
   const explanations = top.map((entry) => ({
-    reasoning: [cameraFocused ? "Suggested by SmartBuy for your camera needs" : "Suggested by SmartBuy for your stated needs", ...generateExplanation(entry.product, requirement)].join(" • "),
+    reasoning: [cameraFocused ? "Suggested by WiseBuy for your camera needs" : "Suggested by WiseBuy for your stated needs", ...generateExplanation(entry.product, requirement)].join(" • "),
     tradeoffs: cameraFocused ? "Check independent camera reviews before deciding." : generateTradeoff(entry.product, requirement, candidates, top),
   }));
 
@@ -469,7 +469,7 @@ export async function generateRecommendation(rawBody, userId, originalQuery) {
 
   const purpose = cameraFocused ? "your camera needs" : requirement.useCases?.join(", ") || "your stated needs";
   const summary = [
-    `SmartBuy suggested ${picks.length === 1 ? "this product" : `these ${picks.length} products`} for ${purpose}. Prices are from live shopping listings${requirement.budget?.max != null ? ` within ₹${requirement.budget.max.toLocaleString("en-IN")}` : ""}.`,
+    `WiseBuy suggested ${picks.length === 1 ? "this product" : `these ${picks.length} products`} for ${purpose}. Prices are from live shopping listings${requirement.budget?.max != null ? ` within ₹${requirement.budget.max.toLocaleString("en-IN")}` : ""}.`,
   ];
   if (picks.length < shortlistedModels.length) {
     summary.push(`Live offers were verified for ${picks.length} of ${shortlistedModels.length} suggested models from Amazon India or Flipkart within your budget.`);

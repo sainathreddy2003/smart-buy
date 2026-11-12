@@ -60,7 +60,7 @@ export function AppleProductCard({ product, index = 0, rank, matchScore, ranking
         <div className="absolute left-3.5 top-3.5 z-20 flex items-center gap-1.5">
           {rank ? (
             <span className="rounded-full bg-[#f3f2f7]/90 backdrop-blur-md border border-[#653ad7]/50 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#191626] shadow-[0_0_10px_rgba(33,12,2,0.2)]">
-              {rankingSource === "groq" ? "SmartBuy pick" : rank === 1 ? "Top Pick" : rank === 2 ? "Runner Up" : "Also Great"}
+              {rankingSource === "groq" ? "WiseBuy pick" : rank === 1 ? "Top Pick" : rank === 2 ? "Runner Up" : "Also Great"}
             </span>
           ) : (
             <span className="rounded-full bg-[#f3f2f7]/85 backdrop-blur-md border border-[#e3e0ea] px-2.5 py-0.5 text-[10px] font-semibold text-[#5e596c]">

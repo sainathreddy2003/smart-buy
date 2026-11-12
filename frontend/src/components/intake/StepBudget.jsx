@@ -17,7 +17,7 @@ export function StepBudget({ category, budgetMin, budgetMax, onChange }) {
         What is your investment range?
       </h2>
       <p className="mt-2 text-sm text-[var(--color-text-muted)]">
-        SmartBuy AI optimizes for best value-to-performance within your designated budget.
+        WiseBuy optimizes for best value-to-performance within your designated budget.
       </p>
 
       <div className="mt-8 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/50 p-6 sm:p-8">

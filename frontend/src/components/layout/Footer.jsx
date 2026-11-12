@@ -15,7 +15,7 @@ export function Footer() {
           <Link to="/favorites">Saved products</Link>
           <Link to="/history">Search history</Link>
         </nav>
-        <small>© {new Date().getFullYear()} SmartBuy AI</small>
+        <small>© {new Date().getFullYear()} WiseBuy</small>
       </div>
     </footer>
   );

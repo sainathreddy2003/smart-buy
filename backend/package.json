@@ -1,7 +1,7 @@
 {
-  "name": "smartbuy-ai-backend",
+  "name": "wisebuy-backend",
   "version": "1.0.0",
-  "description": "SmartBuy AI — an intent-aware, AI-powered technology shopping assistant API",
+  "description": "WiseBuy — an intent-aware, AI-powered technology shopping assistant API",
   "type": "module",
   "main": "src/server.js",
   "scripts": {

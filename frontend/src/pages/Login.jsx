@@ -71,7 +71,7 @@ export default function Login() {
       </form>
 
       <p className="mt-6 text-center text-xs text-[var(--color-text-muted)]">
-        New to SmartBuy AI?{" "}
+        New to WiseBuy?{" "}
         <Link to="/signup" className="font-semibold text-[var(--color-champagne)] hover:text-[var(--color-amber)] hover:underline">
           Create an account
         </Link>

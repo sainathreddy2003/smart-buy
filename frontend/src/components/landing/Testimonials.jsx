@@ -6,7 +6,7 @@ const testimonials = [
     name: "Maya R.",
     role: "Freelance Creative Director",
     quote:
-      "I spent weeks lost in laptop spec comparisons. SmartBuy AI understood my video editing and color accuracy needs in one sentence — the GPU memory breakdown was spot-on.",
+      "I spent weeks lost in laptop spec comparisons. WiseBuy understood my video editing and color accuracy needs in one sentence — the GPU memory breakdown was spot-on.",
   },
   {
     name: "Devon K.",

@@ -17,11 +17,11 @@ const COLORS = {
 };
 
 function logSystem(msg) {
-  console.log(`${COLORS.green}${COLORS.bold}[smartbuy]${COLORS.reset} ${msg}`);
+  console.log(`${COLORS.green}${COLORS.bold}[wisebuy]${COLORS.reset} ${msg}`);
 }
 
 function logWarn(msg) {
-  console.log(`${COLORS.yellow}${COLORS.bold}[smartbuy]${COLORS.reset} ${msg}`);
+  console.log(`${COLORS.yellow}${COLORS.bold}[wisebuy]${COLORS.reset} ${msg}`);
 }
 
 function checkPort(port, host = "127.0.0.1") {
@@ -93,7 +93,7 @@ function pipePrefixed(stream, prefixColor, prefixText) {
 
 async function main() {
   console.log(`\n${COLORS.cyan}${COLORS.bold}===========================================${COLORS.reset}`);
-  console.log(`${COLORS.cyan}${COLORS.bold}   🚀 Starting SmartBuy AI Services...     ${COLORS.reset}`);
+  console.log(`${COLORS.cyan}${COLORS.bold}   🚀 Starting WiseBuy Services...     ${COLORS.reset}`);
   console.log(`${COLORS.cyan}${COLORS.bold}===========================================${COLORS.reset}\n`);
 
   await ensureMongo();

@@ -200,7 +200,7 @@ function ChatSession({ productId }) {
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-display text-base font-medium text-[#191626] tracking-tight">
-                  SmartBuy AI
+                  WiseBuy
                 </span>
                 <span className="rounded-full bg-[#653ad7]/15 border border-[#653ad7]/30 px-2 py-0.5 text-[10px] font-semibold text-[#191626]">
                   {selectedCategory !== "all" ? categoryLabel(selectedCategory) : "All Hardware"}

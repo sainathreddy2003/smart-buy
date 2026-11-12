@@ -58,7 +58,7 @@ export function ChatComposer({ input, setInput, onSend, loading, isHero, selecte
   return (
     <div className="w-full max-w-3xl">
       {isHero && (
-        <h1 className="chat-showcase-heading">smartbuy<span>.</span></h1>
+        <h1 className="chat-showcase-heading">wisebuy<span>.</span></h1>
       )}
       <form className={isHero ? "shop-composer shop-composer-start" : "shop-composer"} onSubmit={submit}>
         <textarea

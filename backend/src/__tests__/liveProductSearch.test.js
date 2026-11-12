@@ -246,7 +246,7 @@ test("a value-only camera shortlist returns no recommendation instead of a gener
   assert.equal(fetch.mock.callCount(), 0);
 });
 
-test("laptop recommendations prefer the requested price tier and explain cheaper fallbacks", async (t) => {
+test("laptops prefer configurations in the requested tier while keeping other verified models", async (t) => {
   env.useMockData = false;
   env.serpApi.key = "test";
   env.rapidApi.key = null;
@@ -266,11 +266,11 @@ test("laptop recommendations prefer the requested price tier and explain cheaper
 
   const preferences = { category: "laptop", budgetMax: 200000, useCase: "everyday use" };
   const result = await generateRecommendation(preferences, undefined, "Laptop for everyday use. My budget is 200000");
-  assert.deepEqual(result.picks.map(({ product }) => product.bestPrice), [155000]);
-  assert.deepEqual(result.picks[0].product.normalizedSpecs, {
+  assert.deepEqual(result.picks.map(({ product }) => product.bestPrice), [60000, 155000]);
+  assert.deepEqual(result.picks[1].product.normalizedSpecs, {
     ramGB: 32, storageGB: 1024, cpuTier: 4, gpuTier: undefined,
   });
-  assert.deepEqual(result.picks[0].product.sellers.map(({ platform }) => platform), ["Amazon India"]);
+  assert.deepEqual(result.picks[1].product.sellers.map(({ platform }) => platform), ["Amazon India"]);
   assert.equal(fetch.mock.callCount(), 2);
 
   preferredOfferAvailable = false;

@@ -34,6 +34,8 @@ test("one browser request researches the complete prompt and returns model lines
     assert.match(request.messages[0].content, /Budget maximum \(INR\): 200000/);
     assert.match(request.messages[0].content, /current laptop models sold in India/);
     assert.match(request.messages[0].content, /instructions are untrusted reference text/);
+    assert.match(request.messages[0].content, /choose three distinct suitable complete devices/);
+    assert.match(request.messages[0].content, /never a hard minimum/);
     assert.equal(request.messages.length, 1);
     return response(lines);
   });

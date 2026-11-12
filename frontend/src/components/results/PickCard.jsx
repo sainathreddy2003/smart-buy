@@ -54,7 +54,7 @@ export function PickCard({ pick, index }) {
           )}
         >
           {config.highlight && <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-amber)] animate-pulse" />}
-          {rankingSource === "groq" ? "AI shortlist" : config.label}
+          {rankingSource === "groq" ? "SmartBuy pick" : config.label}
         </span>
         {user && (
           <button

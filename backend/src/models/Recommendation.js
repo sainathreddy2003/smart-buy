@@ -36,8 +36,15 @@ const recommendationSchema = new mongoose.Schema(
 
 export const Recommendation = mongoose.model("Recommendation", recommendationSchema);
 
+// Rebrand older saved recommendations at the response boundary as well.
+function smartBuyCopy(text) {
+  return text?.replace(/\bGroq shortlisted\b/gi, "SmartBuy suggested")
+    .replace(/\bShortlisted by Groq\b/gi, "Suggested by SmartBuy");
+}
+
 export function serializeRecommendation(recommendation) {
   const response = recommendation.toObject();
+  response.summary = smartBuyCopy(response.summary);
   const hadPicks = response.picks.length > 0;
   const { min, max } = response.preferences?.budget ?? {};
   response.picks = response.picks.flatMap(({ product, offers, ...pick }) => {
@@ -45,7 +52,7 @@ export function serializeRecommendation(recommendation) {
     if (!isWholeProductListing(product.listingTitle || product.name, product.category || response.preferences?.category)) return [];
     const eligible = (offers ?? product.sellers ?? []).filter(({ price }) => price >= (min ?? 0) && price <= (max ?? Infinity));
     const filteredProduct = withIndianOffers(product, eligible);
-    return filteredProduct.sellers.length ? [{ ...pick, product: filteredProduct }] : [];
+    return filteredProduct.sellers.length ? [{ ...pick, reasoning: smartBuyCopy(pick.reasoning), product: filteredProduct }] : [];
   });
   if (hadPicks && !response.picks.length) {
     response.summary = "This saved search has no eligible offers from Amazon India, Flipkart, or Croma. Start a new search for current offers.";

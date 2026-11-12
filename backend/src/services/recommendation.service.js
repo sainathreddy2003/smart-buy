@@ -187,7 +187,10 @@ async function fetchCandidates(requirement, originalQuery, cameraFocused) {
     throw new ApiError(503, "Live prices for the shortlisted products are temporarily unavailable. Please try again later.");
   }
   const unique = new Map();
-  for (const lookup of lookups) {
+  for (const [index, lookup] of lookups.entries()) {
+    const outcome = lookup.status === "rejected" ? "price search unavailable"
+      : lookup.value ? "verified offer" : "no matching offer within budget";
+    console.log(`[SEARCH] ${models[index].name}: ${outcome}`);
     if (lookup.status !== "fulfilled" || !lookup.value) continue;
     const product = lookup.value;
     const identity = JSON.stringify([product.source, product.sourceProductId || product.sellers[0].url]);
@@ -201,7 +204,11 @@ async function fetchCandidates(requirement, originalQuery, cameraFocused) {
     const product = cameraFocused ? "a shortlisted camera phone" : `a shortlisted ${category}`;
     throw ApiError.notFound(`I couldn’t find ${product} from Amazon India or Flipkart${budgetMessage} in this search.`);
   }
-  return { candidates, preferredMinPrice, shortlistedModels: models.map(({ name, brand }) => ({ name, brand })) };
+  return {
+    candidates, preferredMinPrice,
+    shortlistedModels: models.map(({ name, brand }) => ({ name, brand })),
+    failedModelSearches: lookups.filter(({ status }) => status === "rejected").length,
+  };
 }
 
 async function persistChosenPicks(topEntries) {
@@ -430,18 +437,20 @@ export async function generateRecommendation(rawBody, userId, originalQuery) {
     || [...(requirement.useCases || []), ...(requirement.keywords || [])].join(" ");
   const cameraFocused = requirement.category === "smartphone"
     && CAMERA_REQUEST.test(cameraIntent);
-  const { candidates, preferredMinPrice, shortlistedModels } = await fetchCandidates(requirement, originalQuery, cameraFocused);
+  const { candidates, preferredMinPrice, shortlistedModels, failedModelSearches } = await fetchCandidates(requirement, originalQuery, cameraFocused);
   console.log(`[SEARCH] ${candidates.length} candidates fetched for category "${requirement.category}"`);
 
   const preferred = preferredMinPrice == null ? [] : candidates.filter((product) => product.bestPrice >= preferredMinPrice);
   const lowerPriceFallback = preferredMinPrice != null && !preferred.length;
-  const ranked = (preferred.length ? preferred : candidates).map((product) => ({ product }));
+  // The preferred tier helps choose configurations and guide model research.
+  // It must not discard other verified models that meet the actual budget.
+  const ranked = candidates.map((product) => ({ product }));
   const top = ranked.slice(0, 3);
 
   console.log(`[RECOMMENDER] ${top.length} Groq picks with verified live shopping prices`);
 
   const explanations = top.map((entry) => ({
-    reasoning: [cameraFocused ? "Shortlisted by Groq for your camera needs" : "Shortlisted by Groq for your stated needs", ...generateExplanation(entry.product, requirement)].join(" • "),
+    reasoning: [cameraFocused ? "Suggested by SmartBuy for your camera needs" : "Suggested by SmartBuy for your stated needs", ...generateExplanation(entry.product, requirement)].join(" • "),
     tradeoffs: cameraFocused ? "Check independent camera reviews before deciding." : generateTradeoff(entry.product, requirement, candidates, top),
   }));
 
@@ -458,17 +467,33 @@ export async function generateRecommendation(rawBody, userId, originalQuery) {
     tradeoffs: explanations[index].tradeoffs,
   }));
 
+  const purpose = cameraFocused ? "your camera needs" : requirement.useCases?.join(", ") || "your stated needs";
+  const summary = [
+    `SmartBuy suggested ${picks.length === 1 ? "this product" : `these ${picks.length} products`} for ${purpose}. Prices are from live shopping listings${requirement.budget?.max != null ? ` within ₹${requirement.budget.max.toLocaleString("en-IN")}` : ""}.`,
+  ];
+  if (picks.length < shortlistedModels.length) {
+    summary.push(`Live offers were verified for ${picks.length} of ${shortlistedModels.length} suggested models from Amazon India or Flipkart within your budget.`);
+    if (failedModelSearches) {
+      summary.push(`Price searches were temporarily unavailable for ${failedModelSearches} ${failedModelSearches === 1 ? "model" : "models"}.`);
+    }
+    if (shortlistedModels.length - picks.length - failedModelSearches > 0) {
+      summary.push("The other models had no matching verified offer in this search.");
+    }
+  }
+  if (shortlistedModels.length < 3) {
+    summary.push(`Research identified ${shortlistedModels.length} suitable ${shortlistedModels.length === 1 ? "model" : "models"} for this request; the target is 3.`);
+  }
+  if (lowerPriceFallback) {
+    summary.push(`None of the shortlisted models had a live offer between ₹${preferredMinPrice.toLocaleString("en-IN")} and ₹${requirement.budget.max.toLocaleString("en-IN")} in this search. These are lower-priced ${cameraFocused ? "camera alternatives" : "alternatives"} within your budget.`);
+  }
+
   const recommendation = await Recommendation.create({
     user: userId || undefined,
     preferences: requirement,
     originalQuery: originalQuery || undefined,
     shortlistedModels,
     picks,
-    summary: lowerPriceFallback
-      ? `I couldn’t find a live offer between ₹${preferredMinPrice.toLocaleString("en-IN")} and ₹${requirement.budget.max.toLocaleString("en-IN")} in this search. Here are lower-priced ${cameraFocused ? "camera alternatives" : "alternatives"} within your budget.`
-      : cameraFocused
-      ? "Groq shortlisted these camera phones. Prices are from live shopping listings."
-      : `Groq shortlisted these products for ${requirement.useCases?.join(", ") || "your stated needs"}. Prices are from live shopping listings${requirement.budget?.max != null ? ` within ₹${requirement.budget.max.toLocaleString("en-IN")}` : ""}.`,
+    summary: summary.join(" "),
   });
 
   await recommendation.populate("picks.product");

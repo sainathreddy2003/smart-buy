@@ -53,6 +53,7 @@ test("product questions use stored product specs without performing a recommenda
     assert.match(request.messages[0].content, /Example Phone/);
     assert.match(request.messages[0].content, /128 GB/);
     assert.match(request.messages[0].content, /not verified/);
+    assert.match(request.messages[0].content, /recommendations as SmartBuy suggestions/);
     assert.equal(request.messages.at(-1).content, "What storage does it have?");
     assert.equal(options.timeout, 15000);
     assert.equal(options.maxRetries, 0);

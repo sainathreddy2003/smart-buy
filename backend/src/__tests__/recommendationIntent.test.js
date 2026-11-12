@@ -166,6 +166,10 @@ test("unavailable suggested models are omitted without fabricating a price or su
   assert.deepEqual(result.picks.map(({ product }) => product.name), ["Example Available 256GB"]);
   assert.equal(save.mock.callCount(), 1);
   assert.equal(fetch.mock.callCount(), 3);
+  assert.match(result.summary, /SmartBuy suggested this product/);
+  assert.match(result.summary, /verified for 1 of 3 suggested models/);
+  assert.match(result.summary, /other models had no matching verified offer/);
+  assert.doesNotMatch(result.summary, /Groq|Research identified/);
 });
 
 test("no verified shortlisted offers returns not found without saving unrelated products", async (t) => {
@@ -222,6 +226,9 @@ test("partial shopping failures retain another model's verified offer", async (t
   const result = await recommend("phone under 1 lakh");
   assert.deepEqual(result.picks.map(({ product }) => product.name), ["Example Available 256GB"]);
   assert.equal(fetch.mock.callCount(), 2);
+  assert.match(result.summary, /verified for 1 of 2 suggested models/);
+  assert.match(result.summary, /temporarily unavailable for 1 model/);
+  assert.doesNotMatch(result.summary, /no matching verified offer/);
 });
 
 test("all failed shopping requests report service unavailability rather than no matching products", async (t) => {
@@ -233,13 +240,49 @@ test("all failed shopping requests report service unavailability rather than no 
   assert.equal(save.mock.callCount(), 0);
 });
 
-test("a ₹90,000 phone request prefers available shortlisted offers in its price tier", async (t) => {
+test("a ₹90,000 phone request keeps cheaper verified models alongside a preferred-tier model", async (t) => {
   const fetch = liveSearchFixture(t, [offer("Infinix Note 60 Pro 256 GB", "₹37,999"), offer("OnePlus 13s 256GB", "₹64,999", "B000000002")]);
   mockPersistence(t);
   mockShortlist(t, [suggestion("Infinix Note 60 Pro"), suggestion("OnePlus 13s")]);
   const result = await recommend("I’m looking for a phone. My budget is 90000");
-  assert.deepEqual(result.picks.map(({ product }) => product.bestPrice), [64999]);
+  assert.deepEqual(result.picks.map(({ product }) => product.bestPrice), [37999, 64999]);
   assert.equal(fetch.mock.callCount(), 2);
+});
+
+for (const [query, names, cameraFit] of [
+  ["phone under 2 lakhs", ["Example First", "Example Second", "Example Third"]],
+  ["best camera phone under 2 lakhs", ["Example First", "Example Second", "Example Third"], "strong"],
+  ["laptop for video editing under 2 lakhs", ["Example First Laptop", "Example Second Laptop", "Example Third Laptop"]],
+]) {
+  test(`all three verified shortlisted models remain visible for ${query}`, async (t) => {
+    const fetch = liveSearchFixture(t, [
+      offer(`${names[0]} 16GB RAM 256GB storage`, "₹1,69,999", "B000000001"),
+      offer(`${names[1]} 16GB RAM 256GB storage`, "₹1,19,999", "B000000002"),
+      offer(`${names[2]} 16GB RAM 256GB storage`, "₹99,999", "B000000003"),
+      offer(`${names[2]} 16GB RAM 512GB storage`, "₹2,00,001", "B000000004"),
+    ]);
+    const save = mockPersistence(t);
+    mockShortlist(t, names.map((name) => suggestion(name, cameraFit)));
+    const result = await recommend(query);
+    assert.deepEqual(result.picks.map(({ product }) => product.bestPrice), [169999, 119999, 99999]);
+    assert.deepEqual(result.picks.map(({ rank }) => rank), [1, 2, 3]);
+    assert.equal(result.shortlistedModels.length, 3);
+    assert.match(result.summary, /SmartBuy suggested these 3 products/);
+    assert.doesNotMatch(result.summary, /Groq|temporarily unavailable|no matching|target is 3/);
+    assert.ok(result.picks.every(({ reasoning }) => reasoning.startsWith("Suggested by SmartBuy")));
+    assert.equal(fetch.mock.callCount(), 3, "Each model uses its search response for prices without extra quote calls");
+    assert.equal(save.mock.callCount(), 3);
+  });
+}
+
+test("a genuinely shorter research shortlist explains the three-product target", async (t) => {
+  const fetch = liveSearchFixture(t, [offer("Example One 256GB", "₹74,999")]);
+  mockPersistence(t);
+  mockShortlist(t, [suggestion("Example One")]);
+  const result = await recommend("phone under 1 lakh");
+  assert.equal(result.picks.length, 1);
+  assert.match(result.summary, /Research identified 1 suitable model for this request; the target is 3/);
+  assert.equal(fetch.mock.callCount(), 1);
 });
 
 for (const query of ["cheapest camera phone under 1 lakh", "camera phone between 30000 and 100000"]) {

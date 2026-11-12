@@ -32,3 +32,16 @@ test("saved validation uses the full provider title rather than a shortened disp
   }) });
   assert.deepEqual(result.picks.map(({ product }) => product.name), ["Apple iPhone 15 Plus 128GB Blue"]);
 });
+
+test("saved summaries and pick explanations use SmartBuy branding without changing shopper data", () => {
+  const originalQuery = "Groq suggested a phone; compare it under 1 lakh";
+  const result = serializeRecommendation({ toObject: () => ({
+    originalQuery,
+    preferences: { category: "smartphone", budget: { max: 100000 } },
+    picks: [{ ...pick("Apple iPhone 15 Plus 128GB", 54999), reasoning: "Shortlisted by Groq for your stated needs • Fits your budget" }],
+    summary: "Groq shortlisted these products. Prices are from live shopping listings.",
+  }) });
+  assert.equal(result.summary, "SmartBuy suggested these products. Prices are from live shopping listings.");
+  assert.equal(result.picks[0].reasoning, "Suggested by SmartBuy for your stated needs • Fits your budget");
+  assert.equal(result.originalQuery, originalQuery);
+});

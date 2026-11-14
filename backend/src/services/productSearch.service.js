@@ -71,7 +71,7 @@ export function matchesShoppingModel(title, modelName, modelBrand) {
 }
 
 export function isLiveModeActive() {
-  return !env.useMockData && Boolean(env.serpApi.key || env.rapidApi.key);
+  return !env.useMockData && Boolean(env.serpApi.key || env.serpApi.key2 || env.rapidApi.key);
 }
 
 // A caller's overall deadline stops only its wait. The cached provider call

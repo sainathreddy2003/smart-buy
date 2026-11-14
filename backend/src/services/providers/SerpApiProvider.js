@@ -3,6 +3,67 @@ import { isNewAvailableListing, ProductProvider } from "./ProductProvider.js";
 import { parseInrPrice } from "../../utils/normalization.js";
 
 const BASE_URL = "https://serpapi.com/search.json";
+const rateLimitedUntil = new Map();
+let nextKey = 0;
+
+function serpApiKeys() {
+  return [...new Set([env.serpApi.key, env.serpApi.key2].map((key) => key?.trim()).filter(Boolean))];
+}
+
+function markKeyLimited(key, error = "") {
+  const delay = /run out of searches|monthly search limit|searches per month/i.test(error)
+    ? 60 * 60_000
+    : 60_000;
+  rateLimitedUntil.set(key, Date.now() + delay);
+}
+
+export async function fetchSerpApiJson(url, { signal } = {}) {
+  const keys = serpApiKeys();
+  if (!keys.length) throw new Error("SerpApi requires SERPAPI_KEY to be configured");
+  const attempted = new Set();
+  let lastError;
+  while (attempted.size < keys.length) {
+    signal?.throwIfAborted();
+    const now = Date.now();
+    const available = keys.map((key, index) => ({ key, index }))
+      .filter(({ key }) => !attempted.has(key) && (rateLimitedUntil.get(key) ?? 0) <= now);
+    if (!available.length) {
+      if (attempted.size) break;
+      throw new Error("All SerpApi keys are temporarily rate limited");
+    }
+    const selected = available.find(({ index }) => index >= nextKey) ?? available[0];
+    attempted.add(selected.key);
+    nextKey = (selected.index + 1) % keys.length;
+    const requestUrl = new URL(url);
+    requestUrl.searchParams.set("api_key", selected.key);
+    const response = await fetch(requestUrl, { signal });
+    if (response.status === 429) {
+      const payload = await response.json().catch(() => ({}));
+      markKeyLimited(selected.key, payload?.error ?? "");
+      lastError = new Error("SerpApi key rate or monthly quota limit reached");
+      continue;
+    }
+    if (response.status === 401 || response.status === 403) {
+      markKeyLimited(selected.key, "invalid key or endpoint access");
+      lastError = new Error("SerpApi key was rejected or lacks access");
+      continue;
+    }
+    if (!response.ok) throw new Error(`SerpApi request failed (${response.status})`);
+    const json = await response.json();
+    if (json?.error && /run out of searches|monthly search limit|searches per month/i.test(json.error)) {
+      markKeyLimited(selected.key, json.error);
+      lastError = new Error("SerpApi key monthly quota exhausted");
+      continue;
+    }
+    if (json?.error && /invalid api key|api key is invalid/i.test(json.error)) {
+      markKeyLimited(selected.key, "invalid key");
+      lastError = new Error("SerpApi key was rejected");
+      continue;
+    }
+    return json;
+  }
+  throw lastError ?? new Error("No available SerpApi key");
+}
 
 function extractBrand(title) {
   return String(title || "").split(/\s+/)[0] || "Unknown";
@@ -17,34 +78,17 @@ function extractBrand(title) {
  * malformed/misaligned field is still possible.
  */
 export class SerpApiProvider extends ProductProvider {
-  #rateLimitedUntil = 0;
-
   async search(query, { category, signal, limit = 15, exactModel = false } = {}) {
-    if (!env.serpApi.key) {
+    if (!serpApiKeys().length) {
       throw new Error("SerpApiProvider requires SERPAPI_KEY to be configured");
     }
-
-    if (Date.now() < this.#rateLimitedUntil) throw new Error("SerpApi rate limit cooldown");
-
     const url = new URL(BASE_URL);
     url.searchParams.set("engine", "google_shopping");
     url.searchParams.set("q", !exactModel && category ? `${query} ${category}` : query);
-    url.searchParams.set("api_key", env.serpApi.key);
     url.searchParams.set("gl", "in");
     url.searchParams.set("hl", "en");
     url.searchParams.set("google_domain", "google.co.in");
-
-    const response = await fetch(url, { signal });
-    if (response.status === 429) {
-      const { error } = await response.json().catch(() => ({}));
-      const delay = /run out of searches/i.test(error ?? "") ? 60 * 60_000 : 60_000;
-      this.#rateLimitedUntil = Date.now() + delay;
-    }
-    if (!response.ok) {
-      throw new Error(`SerpApi request failed (${response.status})`);
-    }
-
-    const json = await response.json();
+    const json = await fetchSerpApiJson(url, { signal });
     if (typeof json.error === "string" && /hasn't returned any results/i.test(json.error)) return [];
     if (json.error) throw new Error("SerpApi returned an error for this search");
 

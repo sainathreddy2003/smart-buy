@@ -1,6 +1,7 @@
 import { PriceHistory } from "../models/PriceHistory.js";
 import { indianOffers, indianRetailerName } from "../utils/indianRetailers.js";
 import { getRapidApiPriceHistory } from "./providers/RapidApiPriceHistoryProvider.js";
+import { getSerpApiPriceHistory } from "./providers/SerpApiPriceHistoryProvider.js";
 
 const HISTORY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 const INDIA_DAY_FORMAT = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" });
@@ -27,16 +28,32 @@ export async function getPriceHistory(product) {
   });
 
   const recordedDays = new Set(entries.map(({ timestamp }) => INDIA_DAY_FORMAT.format(new Date(timestamp))));
-  try {
-    const historical = await getRapidApiPriceHistory(product);
-    for (const entry of historical) {
-      const timestamp = Date.parse(`${entry.timestamp}T00:00:00+05:30`);
-      if (timestamp >= from && timestamp <= now && !recordedDays.has(entry.timestamp)) entries.push(entry);
+  const observedDays = new Set(recordedDays);
+  let externalHistory = [];
+  if (entries.length < 2) {
+    try {
+      externalHistory = await getSerpApiPriceHistory(product);
+    } catch (err) {
+      console.warn(`[PRICE HISTORY] SerpApi: ${err.message}`);
     }
-    entries.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-  } catch (err) {
-    console.warn(`[PRICE HISTORY] ${err.message}`);
   }
+  // SerpApi is the preferred source. Use the existing RapidAPI history only
+  // when Google has no usable history or too few points to draw a trend.
+  if (entries.length + externalHistory.length < 2) {
+    try {
+      externalHistory = [...externalHistory, ...await getRapidApiPriceHistory(product)];
+    } catch (err) {
+      console.warn(`[PRICE HISTORY] RapidAPI: ${err.message}`);
+    }
+  }
+  for (const entry of externalHistory) {
+    const timestamp = Date.parse(`${entry.timestamp}T00:00:00+05:30`);
+    if (timestamp >= from && timestamp <= now && !observedDays.has(entry.timestamp)) {
+      entries.push(entry);
+      observedDays.add(entry.timestamp);
+    }
+  }
+  entries.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
   if (entries.length === 0) {
     return { entries: [], limited: true, low: null, high: null, current: null, changePercent: null };

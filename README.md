@@ -278,15 +278,25 @@ npm run dev               # http://localhost:5173
 | `GROQ_API_KEY` | For live recommendations | Model shortlisting, AI requirement parsing and follow-up chat. Requirement extraction can fall back to the deterministic parser; shortlisting and chat require the key. |
 | `GROQ_LIVE_SEARCH` | No (default `true`) | Groq browser research for current shortlist models. Uses Groq tool quota/billing; `false` explicitly uses model-only shortlisting. |
 | `SERPAPI_KEY` | No | Primary discovery through SerpApi's Google Shopping engine. |
-| `RAPIDAPI_KEY` | No | Real-Time Product Search, price history, Google Search Master fallbacks, native Amazon India search, configured Flipkart search, and optional YouTube review search. |
+| `SERPAPI_KEY_2` | No | Optional second SerpApi subscription key. Requests rotate between both keys and retry on quota/rate limits. |
+| `RAPIDAPI_KEY` | No | Real-Time Product Search and its price-history fallback, Google Search Master fallbacks, native Amazon India search, configured Flipkart search, and optional YouTube review search. |
 | `USE_MOCK_DATA` | No (default `true`) | Set `false` to enable live recommendations. |
 | `YOUTUBE_API_KEY` | No | Alternative to RapidAPI for review search, if you have an official Google YouTube Data API v3 key. |
 
-Live recommendations require `USE_MOCK_DATA=false`, `GROQ_API_KEY`, and at least one of `SERPAPI_KEY` or `RAPIDAPI_KEY`.
+Live recommendations require `USE_MOCK_DATA=false`, `GROQ_API_KEY`, and at least one of `SERPAPI_KEY`, `SERPAPI_KEY_2`, or `RAPIDAPI_KEY`.
 Discovery starts with SerpApi Google Shopping for India. If a provider is
 unavailable, over quota, or returns no eligible exact-model offer, the order is
 Real-Time Product Search, Google Search Master MEGA, standard Google Search
 Master, then native Amazon India and configured Flipkart model search.
+If `SERPAPI_KEY` and `SERPAPI_KEY_2` are both configured, SerpApi rotates
+between them and retries with the second key when the first hits a quota or
+rate limit. Product pages first request Google Product price insights for
+SerpApi-sourced products when the database has fewer than two observations.
+The chart uses only INR observations from approved India retailers within the
+last 30 days; when Google supplies fewer than two usable points, the existing
+RapidAPI history endpoint is the fallback. The Google Product history request
+is cached for 24 hours and is only made when a user opens the product history
+view and local history is insufficient.
 All sources search the same Groq-selected model; no generic discovery query
 is substituted. The first source with an eligible offer stops the chain.
 MacBook matching checks the chip, requested configuration and primary product

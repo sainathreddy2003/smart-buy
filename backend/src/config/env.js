@@ -39,6 +39,7 @@ export const env = {
   // Primary discovery through SerpApi's Google Shopping engine.
   serpApi: {
     key: process.env.SERPAPI_KEY || null,
+    key2: process.env.SERPAPI_KEY_2 || process.env.SERPAPI_KEY2 || null,
   },
   useMockData: process.env.USE_MOCK_DATA !== "false",
   // Only used if someone swaps in an official Google YouTube Data API v3 key
